@@ -22,44 +22,41 @@
 // -- Scrape: node-exporter (host metrics) ------------------------------------
 prometheus.scrape "node_exporter" {
   targets = [
-    { "__address__" = "localhost:" + env("NODE_EXPORTER_PORT") },
+    {
+      "__address__" = "localhost:" + env("NODE_EXPORTER_PORT"),
+      "node"        = env("NODE_NAME"),
+    },
   ]
   forward_to      = [prometheus.remote_write.aggregator.receiver]
   job_name        = "node-exporter"
   scrape_interval = "15s"
-
-  extra_labels = {
-    node = env("NODE_NAME"),
-  }
 }
 
 // -- Scrape: cAdvisor (container metrics) ------------------------------------
 // Port 8080 is internal to the stack — not configurable.
 prometheus.scrape "cadvisor" {
   targets = [
-    { "__address__" = "localhost:8080" },
+    {
+      "__address__" = "localhost:8080",
+      "node"        = env("NODE_NAME"),
+    },
   ]
   forward_to      = [prometheus.remote_write.aggregator.receiver]
   job_name        = "cadvisor"
   scrape_interval = "15s"
-
-  extra_labels = {
-    node = env("NODE_NAME"),
-  }
 }
 
 // -- Scrape: Alloy self-metrics -----------------------------------------------
 prometheus.scrape "alloy_self" {
   targets = [
-    { "__address__" = "localhost:12345" },
+    {
+      "__address__" = "localhost:12345",
+      "node"        = env("NODE_NAME"),
+    },
   ]
   forward_to      = [prometheus.remote_write.aggregator.receiver]
   job_name        = "alloy"
   scrape_interval = "30s"
-
-  extra_labels = {
-    node = env("NODE_NAME"),
-  }
 }
 
 // -- Remote write to aggregator -----------------------------------------------
