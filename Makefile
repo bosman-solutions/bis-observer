@@ -1,26 +1,32 @@
 # =============================================================================
 # observability-demo
 # =============================================================================
-# make collector   — deploy collector stack (any node)
-# make aggregator  — deploy aggregator + collector stacks (aggregator node)
-# make down        — tear down whichever stacks are running on this node
-# make status      — show running stack status
-# make help        — show this message
+# make collector          — deploy collector stack (any node)
+# make aggregator         — deploy aggregator + collector stacks (aggregator node)
+# make restart            — restart all running obs stacks on this node
+# make restart-collector  — restart collector stack only
+# make restart-aggregator — restart aggregator stack only
+# make down               — tear down whichever stacks are running on this node
+# make status             — show running stack status
+# make help               — show this message
 # =============================================================================
 
 COLLECTOR_DIR  := ./collector
 AGGREGATOR_DIR := ./aggregator
 
-.PHONY: help collector aggregator down status
+.PHONY: help collector aggregator restart restart-collector restart-aggregator down status
 
 help:
 	@echo ""
 	@echo "  observability-demo"
 	@echo ""
-	@echo "  make collector   deploy collector stack (any node in the fleet)"
-	@echo "  make aggregator  deploy aggregator + collector stacks (aggregator node)"
-	@echo "  make down        tear down all running obs stacks on this node"
-	@echo "  make status      show status of all obs stacks"
+	@echo "  make collector          deploy collector stack (any node in the fleet)"
+	@echo "  make aggregator         deploy aggregator + collector stacks (aggregator node)"
+	@echo "  make restart            restart all running obs stacks on this node"
+	@echo "  make restart-collector  restart collector stack only"
+	@echo "  make restart-aggregator restart aggregator stack only"
+	@echo "  make down               tear down all running obs stacks on this node"
+	@echo "  make status             show status of all obs stacks"
 	@echo ""
 	@echo "  Notes:"
 	@echo "    - Copy .env.example to .env in each stack directory before deploying"
@@ -55,6 +61,26 @@ aggregator:
 	fi
 	docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env up -d
 	@echo "✓ Collector stack running."
+
+restart-collector:
+	@echo "→ Restarting collector stack..."
+	docker compose -f $(COLLECTOR_DIR)/docker-compose.yml restart
+	@echo "✓ Done."
+
+restart-aggregator:
+	@echo "→ Restarting aggregator stack..."
+	docker compose -f $(AGGREGATOR_DIR)/docker-compose.yml restart
+	@echo "✓ Done."
+
+restart:
+	@echo "→ Restarting all obs stacks..."
+	@if docker compose ls 2>/dev/null | grep -q obs-aggregator; then \
+		docker compose -f $(AGGREGATOR_DIR)/docker-compose.yml restart; \
+	fi
+	@if docker compose ls 2>/dev/null | grep -q obs-collector; then \
+		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml restart; \
+	fi
+	@echo "✓ Done."
 
 down:
 	@echo "→ Checking for running obs stacks..."
