@@ -44,6 +44,7 @@ services:
   # LOKI — log aggregator
   # Receives pushes from all collector Alloy instances.
   # Config in ./config/loki.yml
+  # -config.expand-env=true allows env var interpolation in loki.yml
   # --------------------------------------------------------------------------
   loki:
     image: grafana/loki:latest
@@ -52,7 +53,7 @@ services:
     volumes:
       - ./config/loki.yml:/etc/loki/loki.yml:ro
       - loki-data:/loki
-    command: -config.file=/etc/loki/loki.yml
+    command: -config.file=/etc/loki/loki.yml -config.expand-env=true
     ports:
       - "${AGGREGATOR_LOKI_PORT:-3100}:3100"
     networks:
