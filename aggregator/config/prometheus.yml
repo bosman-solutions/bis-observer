@@ -1,0 +1,16 @@
+# prometheus.yml — AGGREGATOR CONFIG
+# Remote write receiver mode.
+# Collectors push to us — no scrape_configs needed.
+# Retention and storage size controlled via .env.
+
+global:
+  scrape_interval:     60s
+  evaluation_interval: 60s
+  external_labels:
+    role: aggregator
+
+# Self-scrape only — keeps Prometheus' own health metrics in the store.
+scrape_configs:
+  - job_name: prometheus-self
+    static_configs:
+      - targets: ['localhost:9090']

@@ -1,0 +1,4 @@
+# environment files contain node-specific addressing — never commit
+.env
+collector/.env
+aggregator/.env

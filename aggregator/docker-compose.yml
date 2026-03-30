@@ -1,0 +1,96 @@
+###############################################################################
+# observability-demo — AGGREGATOR STACK
+# Runs on the central aggregation node.
+# Receives metrics and logs from all collector nodes in the fleet.
+#
+# Usage:
+#   1. cp .env.example .env && edit .env
+#   2. docker compose up -d
+#
+# Stack:
+#   prometheus — receives remote_write from all collectors, long-term store
+#   loki       — receives log pushes from all collectors
+#   grafana    — visualization layer over both
+###############################################################################
+
+name: obs-aggregator
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PROMETHEUS — metrics aggregator
+  # Remote write receiver mode: collectors push to us, we don't scrape them.
+  # --web.enable-remote-write-receiver opens the /api/v1/write endpoint.
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: obs-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=${PROM_RETENTION:-90d}'
+      - '--web.enable-lifecycle'
+      - '--web.enable-remote-write-receiver'
+    ports:
+      - "${AGGREGATOR_PROM_PORT:-9090}:9090"
+    networks:
+      - aggregator
+
+  # --------------------------------------------------------------------------
+  # LOKI — log aggregator
+  # Receives pushes from all collector Alloy instances.
+  # Config in ./config/loki.yml
+  # --------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:latest
+    container_name: obs-loki
+    restart: unless-stopped
+    volumes:
+      - ./config/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/loki.yml
+    ports:
+      - "${AGGREGATOR_LOKI_PORT:-3100}:3100"
+    networks:
+      - aggregator
+
+  # --------------------------------------------------------------------------
+  # GRAFANA — visualization
+  # Default credentials: admin / admin
+  # Grafana will prompt you to change the password on first login.
+  # Do not set credentials here — the env var is a one-shot that only applies
+  # on first boot, and a plaintext password in .env is a larger attack surface
+  # than Grafana's built-in first-login prompt.
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: obs-grafana
+    restart: unless-stopped
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - aggregator
+
+networks:
+  aggregator:
+    name: obs-aggregator
+
+volumes:
+  prometheus-data:
+    name: obs-prometheus-data
+  loki-data:
+    name: obs-loki-data
+  grafana-data:
+    name: obs-grafana-data

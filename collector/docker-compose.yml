@@ -1,0 +1,105 @@
+###############################################################################
+# observability-demo — COLLECTOR STACK
+# Portable: runs on any Docker-capable node regardless of OS.
+# Tested topology: Raspbian Trixie, Arch Linux, Ubuntu
+#
+# Usage:
+#   1. Copy this directory to the target node
+#   2. cp .env.example .env && edit .env
+#   3. docker compose up -d
+#
+# Stack:
+#   node-exporter  — host metrics (CPU, RAM, disk, net)
+#   cadvisor       — container metrics
+#   alloy          — unified collector: scrapes exporters, ships metrics via
+#                    remote_write AND ships logs to Loki. Replaces both
+#                    prometheus-agent and promtail in a single container.
+#                    (Promtail reached EOL March 2026)
+###############################################################################
+
+name: obs-collector
+
+services:
+
+  # --------------------------------------------------------------------------
+  # NODE EXPORTER — host-level metrics
+  # Runs in host network + pid mode for accurate readings.
+  # Alloy scrapes this on localhost:${NODE_EXPORTER_PORT}.
+  # Port is configurable in .env — default 9100.
+  # --------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: obs-node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--web.listen-address=:${NODE_EXPORTER_PORT:-9100}'
+
+  # --------------------------------------------------------------------------
+  # CADVISOR — container-level metrics
+  # Alloy scrapes this on localhost:8080 (internal only, not configurable).
+  # On k3s nodes, also surfaces pod-level container metrics.
+  # --------------------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: obs-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:8080:8080"   # localhost only — Alloy scrapes it, not exposed to network
+
+  # --------------------------------------------------------------------------
+  # ALLOY — unified telemetry collector
+  # Replaces both prometheus-agent and promtail (promtail EOL March 2026).
+  # Config in ./alloy/config.alloy
+  #
+  # Does two things:
+  #   1. Scrapes node-exporter + cadvisor → remote_write to aggregator Prometheus
+  #   2. Tails Docker + system logs → push to aggregator Loki
+  # --------------------------------------------------------------------------
+  alloy:
+    image: grafana/alloy:latest
+    container_name: obs-alloy
+    restart: unless-stopped
+    network_mode: host          # host mode: reaches node-exporter on localhost
+    pid: host
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - alloy-data:/var/lib/alloy
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+    environment:
+      - NODE_NAME=${NODE_NAME:-$HOSTNAME}
+      - NODE_EXPORTER_PORT=${NODE_EXPORTER_PORT:-9100}
+      - AGGREGATOR_HOST=${AGGREGATOR_HOST}
+      - AGGREGATOR_PROM_PORT=${AGGREGATOR_PROM_PORT:-9090}
+      - AGGREGATOR_LOKI_PORT=${AGGREGATOR_LOKI_PORT:-3100}
+    depends_on:
+      - node-exporter
+      - cadvisor
+
+volumes:
+  alloy-data:
+    name: obs-alloy-data
