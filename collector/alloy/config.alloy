@@ -27,24 +27,12 @@ prometheus.scrape "node_exporter" {
       "node"        = env("NODE_NAME"),
     },
   ]
-  forward_to      = [prometheus.remote_write.aggregator.receiver]
+  forward_to      = [prometheus.relabel.set_instance.receiver]
   job_name        = "node-exporter"
   scrape_interval = "15s"
-
-  // Override instance label so dashboards can filter by node name.
-  // Without this, instance would be "localhost:9100" on every node,
-  // causing all nodes to appear merged in dashboards.
-  relabeling {
-    target_label = "instance"
-    replacement  = env("NODE_NAME")
-  }
 }
 
 // -- Scrape: cAdvisor (container metrics) ------------------------------------
-// Port 8080 is internal to the stack — not configurable.
-// instance is set to NODE_NAME here too for consistency,
-// but cAdvisor metrics also carry individual container labels
-// (container, image, name) for per-container filtering.
 prometheus.scrape "cadvisor" {
   targets = [
     {
@@ -52,14 +40,9 @@ prometheus.scrape "cadvisor" {
       "node"        = env("NODE_NAME"),
     },
   ]
-  forward_to      = [prometheus.remote_write.aggregator.receiver]
+  forward_to      = [prometheus.relabel.set_instance.receiver]
   job_name        = "cadvisor"
   scrape_interval = "15s"
-
-  relabeling {
-    target_label = "instance"
-    replacement  = env("NODE_NAME")
-  }
 }
 
 // -- Scrape: Alloy self-metrics -----------------------------------------------
@@ -70,11 +53,20 @@ prometheus.scrape "alloy_self" {
       "node"        = env("NODE_NAME"),
     },
   ]
-  forward_to      = [prometheus.remote_write.aggregator.receiver]
+  forward_to      = [prometheus.relabel.set_instance.receiver]
   job_name        = "alloy"
   scrape_interval = "30s"
+}
 
-  relabeling {
+// -- Relabel: overwrite instance with node name ------------------------------
+// All three scrapers feed into this single relabel component.
+// Without this, instance would be "localhost:PORT" on every node,
+// causing all nodes to appear merged in dashboards that filter by instance.
+prometheus.relabel "set_instance" {
+  forward_to = [prometheus.remote_write.aggregator.receiver]
+
+  rule {
+    action       = "replace"
     target_label = "instance"
     replacement  = env("NODE_NAME")
   }
