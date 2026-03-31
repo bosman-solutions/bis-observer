@@ -40,7 +40,7 @@ help:
 # Uses the host's actual hostname via $(shell hostname) — evaluated by make,
 # not by the shell that Docker Compose runs in, so it always resolves correctly.
 _set_node_name:
-	@if ! grep -q '^NODE_NAME=' $(COLLECTOR_DIR)/.env 2>/dev/null; then \
+	@if ! grep -qE '^NODE_NAME=[^[:space:]]' $(COLLECTOR_DIR)/.env 2>/dev/null; then \
 		echo "  NODE_NAME not set — using hostname: $(HOSTNAME)"; \
 		echo "NODE_NAME=$(HOSTNAME)" >> $(COLLECTOR_DIR)/.env; \
 	fi
