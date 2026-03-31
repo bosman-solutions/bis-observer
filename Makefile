@@ -13,6 +13,7 @@
 
 COLLECTOR_DIR  := ./collector
 AGGREGATOR_DIR := ./aggregator
+HOSTNAME       := $(shell hostname)
 
 .PHONY: help collector aggregator restart restart-collector restart-aggregator down status
 
@@ -32,9 +33,19 @@ help:
 	@echo "    - Copy .env.example to .env in each stack directory before deploying"
 	@echo "    - Aggregator node: set AGGREGATOR_HOST to this node's LAN/WireGuard IP"
 	@echo "    - Collector nodes: set AGGREGATOR_HOST to the aggregator's IP"
+	@echo "    - NODE_NAME defaults to system hostname ($(HOSTNAME)) if not set in .env"
 	@echo ""
 
-collector:
+# Stamp NODE_NAME into collector .env if not already set.
+# Uses the host's actual hostname via $(shell hostname) — evaluated by make,
+# not by the shell that Docker Compose runs in, so it always resolves correctly.
+_set_node_name:
+	@if ! grep -q '^NODE_NAME=' $(COLLECTOR_DIR)/.env 2>/dev/null; then \
+		echo "  NODE_NAME not set — using hostname: $(HOSTNAME)"; \
+		echo "NODE_NAME=$(HOSTNAME)" >> $(COLLECTOR_DIR)/.env; \
+	fi
+
+collector: _set_node_name
 	@echo "→ Deploying collector stack..."
 	@if [ ! -f $(COLLECTOR_DIR)/.env ]; then \
 		echo "  ERROR: $(COLLECTOR_DIR)/.env not found."; \
@@ -44,7 +55,7 @@ collector:
 	docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env up -d
 	@echo "✓ Collector stack running."
 
-aggregator:
+aggregator: _set_node_name
 	@echo "→ Deploying aggregator stack..."
 	@if [ ! -f $(AGGREGATOR_DIR)/.env ]; then \
 		echo "  ERROR: $(AGGREGATOR_DIR)/.env not found."; \

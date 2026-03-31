@@ -91,7 +91,7 @@ services:
       - --storage.path=/var/lib/alloy
       - --server.http.listen-addr=0.0.0.0:12345
     environment:
-      - NODE_NAME=${NODE_NAME:-$HOSTNAME}
+      - NODE_NAME=${NODE_NAME}
       - NODE_EXPORTER_PORT=${NODE_EXPORTER_PORT:-9100}
       - AGGREGATOR_HOST=${AGGREGATOR_HOST}
       - AGGREGATOR_PROM_PORT=${AGGREGATOR_PROM_PORT:-9090}
