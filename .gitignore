@@ -2,3 +2,4 @@
 .env
 collector/.env
 aggregator/.env
+collector/alloy/config.ksm.alloy

@@ -81,13 +81,13 @@ services:
     network_mode: host          # host mode: reaches node-exporter on localhost
     pid: host
     volumes:
-      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./alloy:/etc/alloy:ro
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - alloy-data:/var/lib/alloy
     command:
       - run
-      - /etc/alloy/config.alloy
+      - /etc/alloy/
       - --storage.path=/var/lib/alloy
       - --server.http.listen-addr=0.0.0.0:12345
     environment:
@@ -96,6 +96,8 @@ services:
       - AGGREGATOR_HOST=${AGGREGATOR_HOST}
       - AGGREGATOR_PROM_PORT=${AGGREGATOR_PROM_PORT:-9090}
       - AGGREGATOR_LOKI_PORT=${AGGREGATOR_LOKI_PORT:-3100}
+      - KSM_PORT=${KSM_PORT:-}
+      - CLUSTER_NAME=${CLUSTER_NAME:-}
     depends_on:
       - node-exporter
       - cadvisor
