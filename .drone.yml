@@ -33,12 +33,8 @@ steps:
       key:
         from_secret: drone_deploy
       port: 22
-      envs:
-        - deploy_path
       script:
-        - cd $DEPLOY_PATH
-        - git pull origin main
-        - make collector
+        - cd /opt/bis-observer && git pull origin main && make collector
 
   - name: deploy-melchior
     image: appleboy/drone-ssh
@@ -49,12 +45,8 @@ steps:
       key:
         from_secret: drone_deploy
       port: 22
-      envs:
-        - deploy_path
       script:
-        - cd $DEPLOY_PATH
-        - git pull origin main
-        - make aggregator
+        - cd /opt/bis-observer && git pull origin main && make aggregator
 
   - name: deploy-cerberus
     image: appleboy/drone-ssh
@@ -65,9 +57,5 @@ steps:
       key:
         from_secret: drone_deploy
       port: 22
-      envs:
-        - deploy_path
       script:
-        - cd $DEPLOY_PATH
-        - git pull origin main
-        - make collector
+        - cd /opt/bis-observer && git pull origin main && make collector
