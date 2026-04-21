@@ -45,7 +45,17 @@ _set_node_name:
 		echo "NODE_NAME=$(HOSTNAME)" >> $(COLLECTOR_DIR)/.env; \
 	fi
 
-collector: _set_node_name
+_inject_ksm_config:
+	@if grep -qE '^KSM_PORT=[^[:space:]]' $(COLLECTOR_DIR)/.env 2>/dev/null; then \
+		echo "  KSM_PORT set — injecting kube-state-metrics scrape config..."; \
+		cp $(COLLECTOR_DIR)/alloy/config.ksm.alloy.tpl $(COLLECTOR_DIR)/alloy/config.ksm.alloy; \
+		echo "✓ config.ksm.alloy written."; \
+	else \
+		echo "  KSM_PORT not set — skipping kube-state-metrics scrape config."; \
+		rm -f $(COLLECTOR_DIR)/alloy/config.ksm.alloy; \
+	fi
+
+collector: _set_node_name _inject_ksm_config
 	@echo "→ Deploying collector stack..."
 	@if [ ! -f $(COLLECTOR_DIR)/.env ]; then \
 		echo "  ERROR: $(COLLECTOR_DIR)/.env not found."; \
