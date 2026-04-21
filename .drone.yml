@@ -33,6 +33,7 @@ steps:
       key:
         from_secret: drone_deploy
       port: 22
+      debug: true
       envs:
         - deploy_path
       script:
