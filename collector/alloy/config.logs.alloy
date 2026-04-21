@@ -1,0 +1,103 @@
+// =============================================================================
+// Grafana Alloy — Logs Pipeline
+// =============================================================================
+// Collects Docker container logs via the Docker socket (standard container_name
+// label — compatible with community Grafana dashboards), plus syslog and
+// /var/log/*.log from the host. Pushes all logs to aggregator Loki.
+//
+// Requires /var/run/docker.sock mounted read-only in docker-compose.yml.
+//
+// Environment variables:
+//   NODE_NAME            — human label for this node (defaults to hostname)
+//   AGGREGATOR_HOST      — IP or hostname of the aggregator node
+//   AGGREGATOR_LOKI_PORT — aggregator Loki push port (default 3100)
+// =============================================================================
+
+// -- Discovery: Docker container metadata ------------------------------------
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "10s"
+}
+
+// -- Relabel: extract container_name and image_name from Docker metadata -----
+// __meta_docker_container_name comes in as "/container_name" — strip the slash.
+// Adds node label so logs are identifiable per host in Grafana.
+discovery.relabel "docker_meta" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container_name"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    target_label  = "image_name"
+  }
+
+  rule {
+    replacement  = env("NODE_NAME")
+    target_label = "node"
+  }
+
+  rule {
+    replacement  = "docker"
+    target_label = "job"
+  }
+}
+
+// -- Source: Docker container logs via socket --------------------------------
+// Uses Docker API directly — no JSON parsing needed, no file path hacks.
+// Produces standard container_name label for community dashboard compatibility.
+loki.source.docker "docker_logs" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.relabel.docker_meta.output
+  forward_to       = [loki.write.aggregator.receiver]
+  refresh_interval = "10s"
+}
+
+// -- Source: syslog -----------------------------------------------------------
+local.file_match "syslog" {
+  path_targets = [{
+    __path__ = "/var/log/syslog",
+    node     = env("NODE_NAME"),
+    job      = "syslog",
+  }]
+  sync_period = "30s"
+}
+
+// -- Source: /var/log/*.log ---------------------------------------------------
+local.file_match "varlog" {
+  path_targets = [{
+    __path__ = "/var/log/*.log",
+    node     = env("NODE_NAME"),
+    job      = "varlog",
+  }]
+  sync_period = "30s"
+}
+
+loki.source.file "syslog_source" {
+  targets    = local.file_match.syslog.targets
+  forward_to = [loki.write.aggregator.receiver]
+}
+
+loki.source.file "varlog_source" {
+  targets    = local.file_match.varlog.targets
+  forward_to = [loki.write.aggregator.receiver]
+}
+
+// -- Write: push all logs to aggregator Loki ----------------------------------
+loki.write "aggregator" {
+  endpoint {
+    url = "http://" + env("AGGREGATOR_HOST") + ":" + env("AGGREGATOR_LOKI_PORT") + "/loki/api/v1/push"
+
+    batch_wait = "5s"
+    batch_size = "512KiB"
+  }
+
+  external_labels = {
+    node        = env("NODE_NAME"),
+    environment = "homelab",
+  }
+}
