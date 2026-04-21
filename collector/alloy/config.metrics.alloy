@@ -1,0 +1,83 @@
+// =============================================================================
+// Grafana Alloy — Metrics Pipeline
+// =============================================================================
+// Scrapes node-exporter, cAdvisor, and Alloy self-metrics.
+// Relabels instance to NODE_NAME and remote_writes to aggregator Prometheus.
+//
+// Environment variables:
+//   NODE_NAME            — human label for this node (defaults to hostname)
+//   NODE_EXPORTER_PORT   — node-exporter port (default 9100)
+//   AGGREGATOR_HOST      — IP or hostname of the aggregator node
+//   AGGREGATOR_PROM_PORT — aggregator Prometheus remote_write port (default 9090)
+// =============================================================================
+
+// -- Scrape: node-exporter (host metrics) ------------------------------------
+prometheus.scrape "node_exporter" {
+  targets = [
+    {
+      "__address__" = "localhost:" + env("NODE_EXPORTER_PORT"),
+      "node"        = env("NODE_NAME"),
+    },
+  ]
+  forward_to      = [prometheus.relabel.set_instance.receiver]
+  job_name        = "node-exporter"
+  scrape_interval = "15s"
+}
+
+// -- Scrape: cAdvisor (container metrics) ------------------------------------
+prometheus.scrape "cadvisor" {
+  targets = [
+    {
+      "__address__" = "localhost:8080",
+      "node"        = env("NODE_NAME"),
+    },
+  ]
+  forward_to      = [prometheus.relabel.set_instance.receiver]
+  job_name        = "cadvisor"
+  scrape_interval = "15s"
+}
+
+// -- Scrape: Alloy self-metrics -----------------------------------------------
+prometheus.scrape "alloy_self" {
+  targets = [
+    {
+      "__address__" = "localhost:12345",
+      "node"        = env("NODE_NAME"),
+    },
+  ]
+  forward_to      = [prometheus.relabel.set_instance.receiver]
+  job_name        = "alloy"
+  scrape_interval = "30s"
+}
+
+// -- Relabel: overwrite instance with node name ------------------------------
+// All three scrapers feed into this single relabel component.
+// Without this, instance would be "localhost:PORT" on every node,
+// causing all nodes to appear merged in dashboards that filter by instance.
+prometheus.relabel "set_instance" {
+  forward_to = [prometheus.remote_write.aggregator.receiver]
+
+  rule {
+    action       = "replace"
+    target_label = "instance"
+    replacement  = env("NODE_NAME")
+  }
+}
+
+// -- Remote write to aggregator -----------------------------------------------
+prometheus.remote_write "aggregator" {
+  endpoint {
+    url = "http://" + env("AGGREGATOR_HOST") + ":" + env("AGGREGATOR_PROM_PORT") + "/api/v1/write"
+
+    queue_config {
+      max_samples_per_send = 1000
+      max_shards           = 4
+      capacity             = 10000
+    }
+  }
+
+  external_labels = {
+    node        = env("NODE_NAME"),
+    environment = "homelab",
+  }
+}
