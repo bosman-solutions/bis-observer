@@ -1,0 +1,61 @@
+---
+kind: pipeline
+type: docker
+name: deploy
+
+trigger:
+  branch:
+    - main
+  event:
+    - push
+
+# Deploys bis-observer to all fleet nodes on push to main.
+#
+# Required secrets (set in Drone org settings):
+#   drone_deploy  — SSH private key, authorized on all target nodes
+#   deploy_user   — SSH username on target nodes (e.g. disco)
+#   deploy_path   — path where bis-observer is cloned on each node (e.g. /opt/bis-observer)
+#
+# To add or remove nodes: copy a step below and adjust host and script make target.
+#   Collector nodes:   make collector
+#   Aggregator nodes:  make aggregator
+#
+# See README.md for fleet setup and node migration instructions.
+
+steps:
+
+  - name: deploy-balthazar
+    image: appleboy/drone-ssh
+    settings:
+      host: balthazar
+      user:
+        from_secret: deploy_user
+      key:
+        from_secret: drone_deploy
+      port: 22
+      script:
+        - cd /opt/bis-observer && git pull origin main && make collector
+
+  - name: deploy-melchior
+    image: appleboy/drone-ssh
+    settings:
+      host: melchior
+      user:
+        from_secret: deploy_user
+      key:
+        from_secret: drone_deploy
+      port: 22
+      script:
+        - cd /opt/bis-observer && git pull origin main && make aggregator
+
+  - name: deploy-cerberus
+    image: appleboy/drone-ssh
+    settings:
+      host: cerberus
+      user:
+        from_secret: deploy_user
+      key:
+        from_secret: drone_deploy
+      port: 22
+      script:
+        - cd /opt/bis-observer && git pull origin main && make collector
