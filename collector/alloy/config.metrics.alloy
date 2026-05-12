@@ -1,12 +1,13 @@
 // =============================================================================
 // Grafana Alloy — Metrics Pipeline
 // =============================================================================
-// Scrapes node-exporter, cAdvisor, and Alloy self-metrics.
+// Scrapes node-exporter, cAdvisor, docker-inventory, and Alloy self-metrics.
 // Relabels instance to NODE_NAME and remote_writes to aggregator Prometheus.
 //
 // Environment variables:
 //   NODE_NAME            — human label for this node (defaults to hostname)
 //   NODE_EXPORTER_PORT   — node-exporter port (default 9100)
+//   INVENTORY_PORT       — docker-inventory port (default 9338)
 //   AGGREGATOR_HOST      — IP or hostname of the aggregator node
 //   AGGREGATOR_PROM_PORT — aggregator Prometheus remote_write port (default 9090)
 // =============================================================================
@@ -24,7 +25,7 @@ prometheus.scrape "node_exporter" {
   scrape_interval = "15s"
 }
 
-// -- Scrape: cAdvisor (container metrics) ------------------------------------
+// -- Scrape: cAdvisor (running container metrics) ----------------------------
 prometheus.scrape "cadvisor" {
   targets = [
     {
@@ -35,6 +36,22 @@ prometheus.scrape "cadvisor" {
   forward_to      = [prometheus.relabel.set_instance.receiver]
   job_name        = "cadvisor"
   scrape_interval = "15s"
+}
+
+// -- Scrape: docker-inventory (ALL container state, including stopped) --------
+// Fills the gap cAdvisor leaves — dead containers remain visible in Prometheus
+// until docker rm is run. Exposes docker_container_info, docker_container_started_at,
+// and docker_container_finished_at metrics.
+prometheus.scrape "docker_inventory" {
+  targets = [
+    {
+      "__address__" = "localhost:" + coalesce(env("INVENTORY_PORT"), "9338"),
+      "node"        = env("NODE_NAME"),
+    },
+  ]
+  forward_to      = [prometheus.relabel.set_instance.receiver]
+  job_name        = "docker-inventory"
+  scrape_interval = "30s"
 }
 
 // -- Scrape: Alloy self-metrics -----------------------------------------------
@@ -51,7 +68,7 @@ prometheus.scrape "alloy_self" {
 }
 
 // -- Relabel: overwrite instance with node name ------------------------------
-// All three scrapers feed into this single relabel component.
+// All scrapers feed into this single relabel component.
 // Without this, instance would be "localhost:PORT" on every node,
 // causing all nodes to appear merged in dashboards that filter by instance.
 prometheus.relabel "set_instance" {
