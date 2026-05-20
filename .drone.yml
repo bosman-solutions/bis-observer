@@ -48,14 +48,18 @@ steps:
       script:
         - cd /opt/bis-observer && git pull origin main && make aggregator
 
-  - name: deploy-cerberus
+  # Gaspar is a laptop — online intermittently. failure: ignore means the pipeline
+  # succeeds regardless; deploy runs when he's up, silently skips when he's not.
+  - name: deploy-gaspar
+    failure: ignore
     image: appleboy/drone-ssh
     settings:
-      host: cerberus
+      host: gaspar
       user:
         from_secret: deploy_user
       key:
         from_secret: drone_deploy
       port: 22
+      connect_timeout: 15s
       script:
         - cd /opt/bis-observer && git pull origin main && make collector
