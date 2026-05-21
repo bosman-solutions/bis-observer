@@ -15,6 +15,7 @@
 COLLECTOR_DIR  := ./collector
 AGGREGATOR_DIR := ./aggregator
 HOSTNAME       := $(shell hostname)
+ARCH           := $(shell uname -m)
 
 .PHONY: help collector aggregator kube restart restart-collector restart-aggregator down status
 
@@ -65,7 +66,12 @@ collector: _set_node_name _inject_ksm_config
 		echo "         cp $(COLLECTOR_DIR)/.env.example $(COLLECTOR_DIR)/.env and set AGGREGATOR_HOST"; \
 		exit 1; \
 	fi
-	docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env up -d
+	@if [ "$(ARCH)" = "armv7l" ]; then \
+		echo "  armv7 detected — deploying slim collector (no Alloy, no cAdvisor)..."; \
+		docker compose -f $(COLLECTOR_DIR)/docker-compose.armv7.yml --env-file $(COLLECTOR_DIR)/.env up -d; \
+	else \
+		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env up -d; \
+	fi
 	@echo "✓ Collector stack running."
 
 aggregator: _set_node_name

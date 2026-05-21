@@ -1,6 +1,5 @@
 # prometheus.yml — AGGREGATOR CONFIG
-# Remote write receiver mode.
-# Collectors push to us — no scrape_configs needed.
+# Hybrid mode: remote_write (push) from Alloy nodes + direct scrape (pull) from armv7 nodes.
 # Retention and storage size controlled via .env.
 
 global:
@@ -9,8 +8,51 @@ global:
   external_labels:
     role: aggregator
 
-# Self-scrape only — keeps Prometheus' own health metrics in the store.
 scrape_configs:
+  # Self-scrape — Prometheus own health metrics
   - job_name: prometheus-self
     static_configs:
       - targets: ['localhost:9090']
+
+  # armv7 nodes — direct pull (no Alloy available on arm/v7)
+  # node-exporter on port 9100
+  - job_name: node-exporter-armv7
+    static_configs:
+      - targets:
+          - '10.10.30.11:9100'  # rex
+          - '10.10.30.12:9100'  # fido
+          - '10.10.30.13:9100'  # princess
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '(10\.10\.30\.11):.*'
+        target_label: node
+        replacement: rex
+      - source_labels: [__address__]
+        regex: '(10\.10\.30\.12):.*'
+        target_label: node
+        replacement: fido
+      - source_labels: [__address__]
+        regex: '(10\.10\.30\.13):.*'
+        target_label: node
+        replacement: princess
+
+  # docker-inventory on port 9338 — feeds cadastre topology
+  - job_name: docker-inventory-armv7
+    static_configs:
+      - targets:
+          - '10.10.30.11:9338'  # rex
+          - '10.10.30.12:9338'  # fido
+          - '10.10.30.13:9338'  # princess
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '(10\.10\.30\.11):.*'
+        target_label: node
+        replacement: rex
+      - source_labels: [__address__]
+        regex: '(10\.10\.30\.12):.*'
+        target_label: node
+        replacement: fido
+      - source_labels: [__address__]
+        regex: '(10\.10\.30\.13):.*'
+        target_label: node
+        replacement: princess
