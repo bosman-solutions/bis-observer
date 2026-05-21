@@ -1,0 +1,17 @@
+name: Deploy bis-observer
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Deploy aggregator
+        run: ansible-playbook ~/deploy_aggregator.yml
+
+      - name: Deploy collectors
+        run: ansible-playbook ~/deploy_collector.yml
