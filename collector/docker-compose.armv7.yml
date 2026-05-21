@@ -1,0 +1,58 @@
+###############################################################################
+# COLLECTOR STACK (armv7 / 32-bit ARM)
+#
+# Slim variant for armv7l hosts (Pi Zero 2W, Pi 2/3 32-bit OS).
+# Grafana Alloy and cAdvisor do not publish arm/v7 images — this stack
+# replaces them with direct scrape targets for Prometheus on the aggregator.
+#
+# Differences from docker-compose.yml:
+#   - No Alloy (no arm/v7 image available)
+#   - No cAdvisor (no arm/v7 image available)
+#   - node-exporter and docker-inventory ports exposed to LAN
+#   - Aggregator Prometheus scrapes these nodes directly (pull model)
+#
+# Required: AGGREGATOR_HOST and NODE_NAME must be set in .env
+###############################################################################
+
+name: obs-collector
+
+services:
+
+  # --------------------------------------------------------------------------
+  # NODE EXPORTER — host-level metrics
+  # Exposed on LAN so Prometheus on aggregator can scrape directly.
+  # --------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: obs-node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--web.listen-address=:${NODE_EXPORTER_PORT:-9100}'
+
+  # --------------------------------------------------------------------------
+  # DOCKER INVENTORY — full container state exporter
+  # Exposes metrics for ALL containers — running AND stopped/exited.
+  # Aggregator Prometheus scrapes this directly for cadastre topology.
+  # --------------------------------------------------------------------------
+  docker-inventory:
+    build: ./docker-inventory
+    container_name: obs-docker-inventory
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - NODE_NAME=${NODE_NAME}
+      - ENVIRONMENT=homelab
+      - INVENTORY_PORT=${INVENTORY_PORT:-9338}
+      - POLL_INTERVAL=30
