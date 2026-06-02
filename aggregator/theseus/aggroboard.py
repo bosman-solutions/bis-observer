@@ -170,6 +170,8 @@ def _disk_table_panel(
     label    = f'instance="{instance}"'
     fsfilter = f'fstype!~"{EXCLUDE_FSTYPES}"'
 
+    # Single query returning size, available, used% per mountpoint via label join.
+    # Grafana table format with instant queries and merge transform.
     size_expr     = f'node_filesystem_size_bytes{{{label},{fsfilter}}}'
     avail_expr    = f'node_filesystem_avail_bytes{{{label},{fsfilter}}}'
     used_pct_expr = (
@@ -221,7 +223,10 @@ def _disk_table_panel(
             ],
         },
         "transformations": [
-            {"id": "merge", "options": {}},
+            {
+                "id": "merge",
+                "options": {"reducers": []},
+            },
             {
                 "id": "organize",
                 "options": {
@@ -230,6 +235,12 @@ def _disk_table_panel(
                         "Value #A": "Size",
                         "Value #B": "Available",
                         "Value #C": "Used %",
+                    },
+                    "indexByName": {
+                        "Mountpoint": 0,
+                        "Value #A": 1,
+                        "Value #B": 2,
+                        "Value #C": 3,
                     },
                     "excludeByName": {
                         "Time": True,
@@ -249,7 +260,7 @@ def _disk_table_panel(
                 "datasource": ds_ref,
                 "expr": size_expr,
                 "instant": True,
-                "legendFormat": "",
+                "legendFormat": "{{mountpoint}}",
                 "refId": "A",
                 "format": "table",
             },
@@ -257,7 +268,7 @@ def _disk_table_panel(
                 "datasource": ds_ref,
                 "expr": avail_expr,
                 "instant": True,
-                "legendFormat": "",
+                "legendFormat": "{{mountpoint}}",
                 "refId": "B",
                 "format": "table",
             },
@@ -265,7 +276,7 @@ def _disk_table_panel(
                 "datasource": ds_ref,
                 "expr": used_pct_expr,
                 "instant": True,
-                "legendFormat": "",
+                "legendFormat": "{{mountpoint}}",
                 "refId": "C",
                 "format": "table",
             },
@@ -285,6 +296,21 @@ def _row_panel(panel_id: int, title: str, y: int) -> dict:
     }
 
 
+def _link_panel(panel_id: int, hostname: str, explore_url: str, y: int) -> dict:
+    """Slim full-width text panel with Grafana Explore deeplink."""
+    return {
+        "id": panel_id,
+        "type": "text",
+        "title": "",
+        "gridPos": {"x": 0, "y": y, "w": 24, "h": 2},
+        "options": {
+            "mode": "markdown",
+            "content": f"[📊 Explore {hostname} in Grafana →]({explore_url})",
+        },
+        "transparent": True,
+    }
+
+
 def _build_dashboard_json(hosts: dict, version: int, ds_ref: dict) -> dict:
     panels = []
     panel_id = 1
@@ -297,6 +323,12 @@ def _build_dashboard_json(hosts: dict, version: int, ds_ref: dict) -> dict:
         panels.append(_row_panel(panel_id, hostname.upper(), y))
         panel_id += 1
         y += ROW_H
+
+        explore_url = host_data.get("explore_url", "")
+        if explore_url:
+            panels.append(_link_panel(panel_id, hostname, explore_url, y))
+            panel_id += 1
+            y += 2
 
         cpu_expr = (
             f'100 - (avg by(instance)(rate(node_cpu_seconds_total{{{label},mode="idle"}}[5m])) * 100)'
