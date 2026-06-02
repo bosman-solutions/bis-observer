@@ -103,7 +103,7 @@ services:
       - AGGROBOARD_INTERVAL=${AGGROBOARD_INTERVAL:-60}
       - DASHBOARD_PATH=/dashboards/aggroboard.json
     ports:
-      - "${THESEUS_PORT:-8182}:5000"
+      - "${THESEUS_PORT:-8182}:8182"
     volumes:
       - ./config/grafana/provisioning/dashboards:/dashboards
     depends_on:
