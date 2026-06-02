@@ -230,17 +230,17 @@ def _disk_table_panel(
             {
                 "id": "organize",
                 "options": {
+                    "indexByName": {
+                        "mountpoint": 0,
+                        "Value #C": 1,
+                        "Value #B": 2,
+                        "Value #A": 3,
+                    },
                     "renameByName": {
                         "mountpoint": "Mountpoint",
                         "Value #A": "Size",
                         "Value #B": "Available",
                         "Value #C": "Used %",
-                    },
-                    "indexByName": {
-                        "Mountpoint": 0,
-                        "Value #A": 1,
-                        "Value #B": 2,
-                        "Value #C": 3,
                     },
                     "excludeByName": {
                         "Time": True,
@@ -285,8 +285,8 @@ def _disk_table_panel(
     }
 
 
-def _row_panel(panel_id: int, title: str, y: int) -> dict:
-    return {
+def _row_panel(panel_id: int, title: str, y: int, link: str = "") -> dict:
+    panel = {
         "id": panel_id,
         "type": "row",
         "title": title,
@@ -294,6 +294,9 @@ def _row_panel(panel_id: int, title: str, y: int) -> dict:
         "gridPos": {"x": 0, "y": y, "w": 24, "h": ROW_H},
         "panels": [],
     }
+    if link:
+        panel["links"] = [{"title": f"Explore {title.lower()} in Grafana", "url": link, "targetBlank": True}]
+    return panel
 
 
 def _link_panel(panel_id: int, hostname: str, explore_url: str, y: int) -> dict:
@@ -320,15 +323,10 @@ def _build_dashboard_json(hosts: dict, version: int, ds_ref: dict) -> dict:
         instance = host_data.get("instance", hostname)
         label    = f'instance="{instance}"'
 
-        panels.append(_row_panel(panel_id, hostname.upper(), y))
+        explore_url = host_data.get("explore_url", "")
+        panels.append(_row_panel(panel_id, hostname.upper(), y, link=explore_url))
         panel_id += 1
         y += ROW_H
-
-        explore_url = host_data.get("explore_url", "")
-        if explore_url:
-            panels.append(_link_panel(panel_id, hostname, explore_url, y))
-            panel_id += 1
-            y += 2
 
         cpu_expr = (
             f'100 - (avg by(instance)(rate(node_cpu_seconds_total{{{label},mode="idle"}}[5m])) * 100)'
