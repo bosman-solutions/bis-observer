@@ -164,28 +164,34 @@ def _stat_panel(
     }
 
 
-def _disk_table_panel(
-    panel_id: int, instance: str, x: int, y: int, ds_ref: dict
+def build_fs_table(
+    panel_id: int,
+    title: str,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    size_expr: str,
+    avail_expr: str,
+    ds_ref: dict,
+    sort_by: str = "Mountpoint",
 ) -> dict:
-    label    = f'instance="{instance}"'
-    fsfilter = f'fstype!~"{EXCLUDE_FSTYPES}"'
+    """
+    Generic filesystem table panel.
 
-    # Single query returning size, available, used% per mountpoint via label join.
-    # Grafana table format with instant queries and merge transform.
-    size_expr     = f'node_filesystem_size_bytes{{{label},{fsfilter}}}'
-    avail_expr    = f'node_filesystem_avail_bytes{{{label},{fsfilter}}}'
-    used_pct_expr = (
-        f'100 - ((node_filesystem_avail_bytes{{{label},{fsfilter}}} / '
-        f'node_filesystem_size_bytes{{{label},{fsfilter}}}) * 100)'
-    )
+    Takes size and available byte queries, derives Used % via Grafana transform.
+    Joins on mountpoint label only — strips device/fstype noise before merge.
+    Reusable for host disks, container volumes, or any mountpoint-keyed data.
 
+    Columns: Mountpoint | Used % | Available | Size
+    """
     return {
         "id": panel_id,
         "type": "table",
-        "title": "Disk",
-        "gridPos": {"x": x, "y": y, "w": DISK_W, "h": DISK_H},
+        "title": title,
+        "gridPos": {"x": x, "y": y, "w": w, "h": h},
         "options": {
-            "sortBy": [{"displayName": "Mountpoint"}],
+            "sortBy": [{"displayName": sort_by}],
             "cellHeight": "sm",
             "footer": {"show": False},
         },
@@ -223,24 +229,85 @@ def _disk_table_panel(
             ],
         },
         "transformations": [
+            # Strip everything except mountpoint before merge — prevents
+            # device/fstype label mismatches from creating duplicate rows.
+            {
+                "id": "filterFieldsByName",
+                "options": {
+                    "include": {"pattern": "mountpoint|Value.*|Time"},
+                },
+            },
+            # Merge size and available into one row per mountpoint.
             {
                 "id": "merge",
                 "options": {"reducers": []},
             },
+            # Derive Used % from size and available in-place.
+            {
+                "id": "calculateField",
+                "options": {
+                    "mode": "reduceRow",
+                    "alias": "Used %",
+                    "reduce": {"reducer": "sum"},
+                    "binary": {
+                        "left": "Value #A",
+                        "right": "Value #B",
+                        "reducer": "sum",
+                        "operation": "-",
+                    },
+                },
+            },
+            # Override: Used % = (Size - Available) / Size * 100
+            {
+                "id": "calculateField",
+                "options": {
+                    "mode": "binaryOperation",
+                    "alias": "Used %",
+                    "binary": {
+                        "left": "Value #A",
+                        "right": "Value #B",
+                        "operation": "-",
+                    },
+                },
+            },
+            {
+                "id": "calculateField",
+                "options": {
+                    "mode": "binaryOperation",
+                    "alias": "Used %",
+                    "binary": {
+                        "left": "Used %",
+                        "right": "Value #A",
+                        "operation": "/",
+                    },
+                },
+            },
+            {
+                "id": "calculateField",
+                "options": {
+                    "mode": "binaryOperation",
+                    "alias": "Used %",
+                    "binary": {
+                        "left": "Used %",
+                        "right": "100",
+                        "operation": "*",
+                    },
+                },
+            },
+            # Rename, reorder, exclude noise.
             {
                 "id": "organize",
                 "options": {
-                    "indexByName": {
-                        "mountpoint": 0,
-                        "Value #C": 1,
-                        "Value #B": 2,
-                        "Value #A": 3,
-                    },
                     "renameByName": {
                         "mountpoint": "Mountpoint",
                         "Value #A": "Size",
                         "Value #B": "Available",
-                        "Value #C": "Used %",
+                    },
+                    "indexByName": {
+                        "mountpoint": 0,
+                        "Used %": 1,
+                        "Value #B": 2,
+                        "Value #A": 3,
                     },
                     "excludeByName": {
                         "Time": True,
@@ -272,17 +339,26 @@ def _disk_table_panel(
                 "refId": "B",
                 "format": "table",
             },
-            {
-                "datasource": ds_ref,
-                "expr": used_pct_expr,
-                "instant": True,
-                "legendFormat": "{{mountpoint}}",
-                "refId": "C",
-                "format": "table",
-            },
         ],
         "datasource": ds_ref,
     }
+
+
+def _disk_table_panel(
+    panel_id: int, instance: str, x: int, y: int, ds_ref: dict
+) -> dict:
+    label    = f'instance="{instance}"'
+    fsfilter = f'fstype!~"{EXCLUDE_FSTYPES}"'
+
+    return build_fs_table(
+        panel_id  = panel_id,
+        title     = "Disk",
+        x=x, y=y,
+        w=DISK_W, h=DISK_H,
+        size_expr = f'node_filesystem_size_bytes{{{label},{fsfilter}}}',
+        avail_expr= f'node_filesystem_avail_bytes{{{label},{fsfilter}}}',
+        ds_ref    = ds_ref,
+    )
 
 
 def _row_panel(panel_id: int, title: str, y: int, link: str = "") -> dict:
