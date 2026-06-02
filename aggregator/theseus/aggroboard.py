@@ -407,19 +407,21 @@ class Aggroboard:
         prom_url: str,
         loki_url: str,
         grafana_url: str,
+        grafana_ext_url: str,
         grafana_token: str,
         dashboard_path: Path,
         interval: int,
     ):
-        self.prom_url       = prom_url
-        self.loki_url       = loki_url
-        self.grafana_url    = grafana_url
-        self.grafana_token  = grafana_token
-        self.dashboard_path = dashboard_path
-        self.sidecar_path   = dashboard_path.parent / "aggroboard_hosts.json"
-        self.interval       = interval
+        self.prom_url        = prom_url
+        self.loki_url        = loki_url
+        self.grafana_url     = grafana_url
+        self.grafana_ext_url = grafana_ext_url
+        self.grafana_token   = grafana_token
+        self.dashboard_path  = dashboard_path
+        self.sidecar_path    = dashboard_path.parent / "aggroboard_hosts.json"
+        self.interval        = interval
         self._ds_uid: str | None = None
-        self._ds_ref: dict  = {"type": "prometheus", "uid": "${datasource}"}
+        self._ds_ref: dict   = {"type": "prometheus", "uid": "${datasource}"}
 
     async def _resolve_datasource(self):
         uid = await _get_prometheus_uid(self.grafana_url, self.grafana_token)
@@ -465,7 +467,7 @@ class Aggroboard:
         for instance in added:
             hostname = instance.split(":")[0]
             explore_url = host_explore_url(
-                grafana_url    = self.grafana_url,
+                grafana_url    = self.grafana_ext_url,
                 datasource_uid = self._ds_uid or "prometheus",
                 instance       = instance,
             )

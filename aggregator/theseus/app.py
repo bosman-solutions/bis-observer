@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 PROM_URL            = os.getenv("THESEUS_PROM_URL", "http://obs-prometheus:9090")
 LOKI_URL            = os.getenv("THESEUS_LOKI_URL", "http://obs-loki:3100")
 GRAFANA_URL         = os.getenv("GRAFANA_URL", "http://obs-grafana:3000")
+GRAFANA_EXTERNAL_URL = os.getenv("GRAFANA_EXTERNAL_URL", GRAFANA_URL)
 GRAFANA_TOKEN       = os.getenv("GRAFANA_TOKEN", "")
 AGGROBOARD_INTERVAL = int(os.getenv("AGGROBOARD_INTERVAL", "60"))
 DASHBOARD_PATH      = Path(os.getenv("DASHBOARD_PATH", "/dashboards/aggroboard.json"))
@@ -45,12 +46,13 @@ app = Flask(__name__)
 # ── Background task ───────────────────────────────────────────────────────────
 _loop  = asyncio.new_event_loop()
 _board = Aggroboard(
-    prom_url      = PROM_URL,
-    loki_url      = LOKI_URL,
-    grafana_url   = GRAFANA_URL,
-    grafana_token = GRAFANA_TOKEN,
-    dashboard_path= DASHBOARD_PATH,
-    interval      = AGGROBOARD_INTERVAL,
+    prom_url         = PROM_URL,
+    loki_url         = LOKI_URL,
+    grafana_url      = GRAFANA_URL,
+    grafana_ext_url  = GRAFANA_EXTERNAL_URL,
+    grafana_token    = GRAFANA_TOKEN,
+    dashboard_path   = DASHBOARD_PATH,
+    interval         = AGGROBOARD_INTERVAL,
 )
 
 

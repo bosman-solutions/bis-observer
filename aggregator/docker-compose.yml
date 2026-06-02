@@ -99,6 +99,7 @@ services:
       - THESEUS_PROM_URL=http://obs-prometheus:9090
       - THESEUS_LOKI_URL=http://obs-loki:3100
       - GRAFANA_URL=http://obs-grafana:3000
+      - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:-http://obs-grafana:3000}
       - GRAFANA_TOKEN=${GRAFANA_TOKEN:-}
       - AGGROBOARD_INTERVAL=${AGGROBOARD_INTERVAL:-60}
       - DASHBOARD_PATH=/dashboards/aggroboard.json
