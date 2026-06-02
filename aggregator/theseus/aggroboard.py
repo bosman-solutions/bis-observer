@@ -1,33 +1,34 @@
 """
 aggroboard.py — fleet snapshot writer for bis-theseus.
 
-Runs on a heartbeat. Builds a snapshot of all known hosts from
-Prometheus, compares to the previous snapshot in memory, and writes
-a Grafana-compatible dashboard JSON only when something has changed.
+Heartbeat loop:
+  1. Fetch current host list from Prometheus
+  2. Compare against aggroboard_hosts.json sidecar
+  3. If hosts changed — write new aggroboard.json + update sidecar
+  4. If same — do nothing (dashboard stays stable, Grafana won't prompt)
 
-No state on disk between runs — first heartbeat after restart always writes.
+Sidecar (aggroboard_hosts.json) survives restarts — no spurious writes on boot.
+Sidecar starts empty; hosts join and leave automatically.
 
 Dashboard layout per host:
-  Row 1: CPU %, Memory %, Load ratio (load1/cores), Uptime — stat panels
-  Row 2: Disk table — mountpoints filtered to real filesystems only
+  Row header
+  Row 1: CPU %, Memory %, Load ratio, Uptime — stat panels
+  Row 2: Disk table — real mountpoints only, snap/tmpfs noise filtered
 """
 
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
 import httpx
 
-from .telemetry import HostQuery
-
 logger = logging.getLogger(__name__)
 
-# Filesystem types to exclude from disk table
 EXCLUDE_FSTYPES = "tmpfs|squashfs|overlay|devtmpfs|ramfs|efivarfs|fuse.lxcfs"
 
-# Panel sizing
 STAT_W = 6
 STAT_H = 4
 DISK_W = 24
@@ -35,12 +36,55 @@ DISK_H = 6
 ROW_H  = 2
 
 
+# ── Grafana datasource lookup ─────────────────────────────────────────────────
+
+async def _get_prometheus_uid(grafana_url: str, token: str) -> str | None:
+    """
+    Look up the Prometheus datasource UID from Grafana using a service account token.
+    Returns the UID string, or None if unavailable.
+    """
+    if not token:
+        return None
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{grafana_url}/api/datasources",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+            for ds in resp.json():
+                if ds.get("type") == "prometheus":
+                    uid = ds.get("uid")
+                    logger.info(f"resolved Prometheus datasource UID: {uid}")
+                    return uid
+    except Exception as e:
+        logger.warning(f"could not resolve Prometheus datasource UID: {e}")
+    return None
+
+
+# ── Sidecar helpers ───────────────────────────────────────────────────────────
+
+def _read_sidecar(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {"version": 0, "hosts": [], "updated_at": 0}
+
+
+def _write_sidecar(path: Path, version: int, hosts: list[str]) -> None:
+    path.write_text(json.dumps({
+        "version": version,
+        "hosts": hosts,
+        "updated_at": int(time.time()),
+    }, indent=2))
+
+
+# ── Prometheus instance discovery ─────────────────────────────────────────────
+
 async def _get_known_instances(
     client: httpx.AsyncClient, prom_url: str
 ) -> list[str]:
-    """
-    Return all unique instance labels seen by Node Exporter recently.
-    """
     try:
         resp = await client.get(
             f"{prom_url}/api/v1/query",
@@ -49,29 +93,22 @@ async def _get_known_instances(
         )
         resp.raise_for_status()
         results = resp.json().get("data", {}).get("result", [])
-        return [
+        return sorted([
             r["metric"].get("instance", "")
             for r in results
             if r["metric"].get("instance")
-        ]
+        ])
     except Exception as e:
         logger.warning(f"failed to fetch known instances: {e}")
         return []
 
 
-async def build_snapshot(prom_url: str, loki_url: str) -> dict:
-    """
-    Query all known hosts and return a fleet snapshot dict.
-    Shape: { "generated_at": <unix>, "hosts": [<instance>, ...] }
-    We only need the instance list for the dashboard — PromQL does the rest live.
-    """
-    async with httpx.AsyncClient() as client:
-        instances = await _get_known_instances(client, prom_url)
-        logger.debug(f"snapshot: {len(instances)} instances found")
-        return {
-            "generated_at": int(time.time()),
-            "hosts": sorted(instances),
-        }
+# ── Panel builders ────────────────────────────────────────────────────────────
+
+def _datasource_ref(uid: str | None) -> dict:
+    if uid:
+        return {"type": "prometheus", "uid": uid}
+    return {"type": "prometheus", "uid": "${datasource}"}
 
 
 def _stat_panel(
@@ -81,10 +118,10 @@ def _stat_panel(
     unit: str,
     x: int,
     y: int,
+    ds_ref: dict,
     thresholds: list[dict] | None = None,
     decimals: int = 1,
 ) -> dict:
-    """Single stat panel with a PromQL target."""
     if thresholds is None:
         thresholds = [
             {"color": "green", "value": None},
@@ -107,38 +144,31 @@ def _stat_panel(
             "defaults": {
                 "unit": unit,
                 "decimals": decimals,
-                "thresholds": {
-                    "mode": "absolute",
-                    "steps": thresholds,
-                },
+                "thresholds": {"mode": "absolute", "steps": thresholds},
                 "color": {"mode": "thresholds"},
             },
             "overrides": [],
         },
         "targets": [
             {
-                "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                "datasource": ds_ref,
                 "expr": promql,
                 "instant": True,
                 "legendFormat": "",
             }
         ],
-        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "datasource": ds_ref,
     }
 
 
-def _disk_table_panel(panel_id: int, instance: str, x: int, y: int) -> dict:
-    """
-    Table panel showing all real mountpoints for a host.
-    Columns: mountpoint, size, used, available, used%.
-    Filtered to exclude snap/tmpfs/overlay noise.
-    """
-    label = f'instance="{instance}"'
+def _disk_table_panel(
+    panel_id: int, instance: str, x: int, y: int, ds_ref: dict
+) -> dict:
+    label    = f'instance="{instance}"'
     fsfilter = f'fstype!~"{EXCLUDE_FSTYPES}"'
 
-    # PromQL for each column — Grafana table joins on matching labels
-    size_expr    = f'node_filesystem_size_bytes{{{label},{fsfilter}}}'
-    avail_expr   = f'node_filesystem_avail_bytes{{{label},{fsfilter}}}'
+    size_expr     = f'node_filesystem_size_bytes{{{label},{fsfilter}}}'
+    avail_expr    = f'node_filesystem_avail_bytes{{{label},{fsfilter}}}'
     used_pct_expr = (
         f'100 - ((node_filesystem_avail_bytes{{{label},{fsfilter}}} / '
         f'node_filesystem_size_bytes{{{label},{fsfilter}}}) * 100)'
@@ -155,12 +185,7 @@ def _disk_table_panel(panel_id: int, instance: str, x: int, y: int) -> dict:
             "footer": {"show": False},
         },
         "fieldConfig": {
-            "defaults": {
-                "custom": {
-                    "align": "auto",
-                    "displayMode": "auto",
-                },
-            },
+            "defaults": {"custom": {"align": "auto", "displayMode": "auto"}},
             "overrides": [
                 {
                     "matcher": {"id": "byName", "options": "Size"},
@@ -175,10 +200,7 @@ def _disk_table_panel(panel_id: int, instance: str, x: int, y: int) -> dict:
                     "properties": [
                         {"id": "unit", "value": "percent"},
                         {"id": "decimals", "value": 1},
-                        {
-                            "id": "custom.displayMode",
-                            "value": "color-background",
-                        },
+                        {"id": "custom.displayMode", "value": "color-background"},
                         {
                             "id": "thresholds",
                             "value": {
@@ -196,10 +218,7 @@ def _disk_table_panel(panel_id: int, instance: str, x: int, y: int) -> dict:
             ],
         },
         "transformations": [
-            {
-                "id": "merge",
-                "options": {},
-            },
+            {"id": "merge", "options": {}},
             {
                 "id": "organize",
                 "options": {
@@ -221,7 +240,7 @@ def _disk_table_panel(panel_id: int, instance: str, x: int, y: int) -> dict:
         ],
         "targets": [
             {
-                "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                "datasource": ds_ref,
                 "expr": size_expr,
                 "instant": True,
                 "legendFormat": "",
@@ -229,7 +248,7 @@ def _disk_table_panel(panel_id: int, instance: str, x: int, y: int) -> dict:
                 "format": "table",
             },
             {
-                "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                "datasource": ds_ref,
                 "expr": avail_expr,
                 "instant": True,
                 "legendFormat": "",
@@ -237,7 +256,7 @@ def _disk_table_panel(panel_id: int, instance: str, x: int, y: int) -> dict:
                 "format": "table",
             },
             {
-                "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                "datasource": ds_ref,
                 "expr": used_pct_expr,
                 "instant": True,
                 "legendFormat": "",
@@ -245,7 +264,7 @@ def _disk_table_panel(panel_id: int, instance: str, x: int, y: int) -> dict:
                 "format": "table",
             },
         ],
-        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "datasource": ds_ref,
     }
 
 
@@ -260,26 +279,19 @@ def _row_panel(panel_id: int, title: str, y: int) -> dict:
     }
 
 
-def _build_dashboard_json(snapshot: dict, prom_url: str) -> dict:
-    """
-    Build a Grafana dashboard JSON from the fleet snapshot.
-    Per host: row header, four stat panels, disk table.
-    """
-    hosts = snapshot.get("hosts", [])
+def _build_dashboard_json(hosts: list[str], version: int, ds_ref: dict) -> dict:
     panels = []
     panel_id = 1
     y = 0
 
     for instance in hosts:
         hostname = instance.split(":")[0]
-        label = f'instance="{instance}"'
+        label    = f'instance="{instance}"'
 
-        # ── Row header ──────────────────────────────────────────────────────
         panels.append(_row_panel(panel_id, hostname.upper(), y))
         panel_id += 1
         y += ROW_H
 
-        # ── Stat panels ─────────────────────────────────────────────────────
         cpu_expr = (
             f'100 - (avg by(instance)(rate(node_cpu_seconds_total{{{label},mode="idle"}}[5m])) * 100)'
         )
@@ -287,7 +299,6 @@ def _build_dashboard_json(snapshot: dict, prom_url: str) -> dict:
             f'100 - ((node_memory_MemAvailable_bytes{{{label}}} / '
             f'node_memory_MemTotal_bytes{{{label}}}) * 100)'
         )
-        # Load ratio: load1 / logical CPU count — 1.0 = fully loaded
         load_expr = (
             f'node_load1{{{label}}} / '
             f'count without(cpu,mode)(node_cpu_seconds_total{{{label},mode="idle"}})'
@@ -295,17 +306,17 @@ def _build_dashboard_json(snapshot: dict, prom_url: str) -> dict:
         uptime_expr = f'time() - node_boot_time_seconds{{{label}}}'
 
         panels.append(_stat_panel(
-            panel_id, "CPU", cpu_expr, "percent", x=0, y=y,
+            panel_id, "CPU", cpu_expr, "percent", x=0, y=y, ds_ref=ds_ref,
         ))
         panel_id += 1
 
         panels.append(_stat_panel(
-            panel_id, "Memory", mem_expr, "percent", x=STAT_W, y=y,
+            panel_id, "Memory", mem_expr, "percent", x=STAT_W, y=y, ds_ref=ds_ref,
         ))
         panel_id += 1
 
         panels.append(_stat_panel(
-            panel_id, "Load", load_expr, "short", x=STAT_W * 2, y=y,
+            panel_id, "Load", load_expr, "short", x=STAT_W * 2, y=y, ds_ref=ds_ref,
             thresholds=[
                 {"color": "green", "value": None},
                 {"color": "yellow", "value": 0.7},
@@ -316,35 +327,23 @@ def _build_dashboard_json(snapshot: dict, prom_url: str) -> dict:
         panel_id += 1
 
         panels.append(_stat_panel(
-            panel_id, "Uptime", uptime_expr, "s", x=STAT_W * 3, y=y,
+            panel_id, "Uptime", uptime_expr, "s", x=STAT_W * 3, y=y, ds_ref=ds_ref,
             thresholds=[{"color": "blue", "value": None}],
             decimals=0,
         ))
         panel_id += 1
         y += STAT_H
 
-        # ── Disk table ───────────────────────────────────────────────────────
-        panels.append(_disk_table_panel(panel_id, instance, x=0, y=y))
+        panels.append(_disk_table_panel(panel_id, instance, x=0, y=y, ds_ref=ds_ref))
         panel_id += 1
         y += DISK_H
 
-    generated_at = snapshot.get("generated_at", int(time.time()))
-
     return {
-        "__inputs": [
-            {
-                "name": "datasource",
-                "label": "Prometheus",
-                "description": "",
-                "type": "datasource",
-                "pluginId": "prometheus",
-                "pluginName": "Prometheus",
-            }
-        ],
+        "__inputs": [],
         "__requires": [],
         "annotations": {"list": []},
-        "description": f"bis-theseus aggroboard — auto-generated fleet overview. {generated_at}",
-        "editable": False,
+        "description": "bis-theseus aggroboard — auto-generated fleet overview.",
+        "editable": True,
         "graphTooltip": 0,
         "id": None,
         "links": [],
@@ -352,54 +351,51 @@ def _build_dashboard_json(snapshot: dict, prom_url: str) -> dict:
         "refresh": "1m",
         "schemaVersion": 38,
         "tags": ["bis-theseus", "aggroboard"],
-        "templating": {
-            "list": [
-                {
-                    "current": {},
-                    "hide": 0,
-                    "includeAll": False,
-                    "name": "datasource",
-                    "options": [],
-                    "query": "prometheus",
-                    "refresh": 1,
-                    "type": "datasource",
-                    "label": "Prometheus",
-                }
-            ]
-        },
+        "templating": {"list": []},
         "time": {"from": "now-1h", "to": "now"},
         "timepicker": {},
         "timezone": "browser",
         "title": "bis-aggroboard",
         "uid": "bis-aggroboard",
-        "version": generated_at,
+        "version": version,
     }
 
 
-class Aggroboard:
-    """
-    Heartbeat writer. Maintains previous snapshot in memory.
-    Only writes to disk when snapshot changes.
-    """
+# ── Aggroboard class ──────────────────────────────────────────────────────────
 
+class Aggroboard:
     def __init__(
         self,
         prom_url: str,
         loki_url: str,
+        grafana_url: str,
+        grafana_token: str,
         dashboard_path: Path,
         interval: int,
     ):
-        self.prom_url = prom_url
-        self.loki_url = loki_url
+        self.prom_url       = prom_url
+        self.loki_url       = loki_url
+        self.grafana_url    = grafana_url
+        self.grafana_token  = grafana_token
         self.dashboard_path = dashboard_path
-        self.interval = interval
-        self._previous: dict = {}
+        self.sidecar_path   = dashboard_path.parent / "aggroboard_hosts.json"
+        self.interval       = interval
+        self._ds_ref: dict  = {"type": "prometheus", "uid": "${datasource}"}
+
+    async def _resolve_datasource(self):
+        uid = await _get_prometheus_uid(self.grafana_url, self.grafana_token)
+        if uid:
+            self._ds_ref = {"type": "prometheus", "uid": uid}
+            logger.info(f"datasource locked to uid: {uid}")
+        else:
+            logger.warning("no token or lookup failed — using ${datasource} fallback")
 
     async def run(self):
         logger.info(
             f"aggroboard starting — interval {self.interval}s, "
             f"writing to {self.dashboard_path}"
         )
+        await self._resolve_datasource()
         while True:
             try:
                 await self._tick()
@@ -408,14 +404,28 @@ class Aggroboard:
             await asyncio.sleep(self.interval)
 
     async def _tick(self):
-        snapshot = await build_snapshot(self.prom_url, self.loki_url)
+        async with httpx.AsyncClient() as client:
+            current_hosts = await _get_known_instances(client, self.prom_url)
 
-        if snapshot.get("hosts") == self._previous.get("hosts"):
-            logger.debug("aggroboard: no change, skipping write")
+        sidecar   = _read_sidecar(self.sidecar_path)
+        prev_hosts = sidecar.get("hosts", [])
+
+        if current_hosts == prev_hosts:
+            logger.debug("aggroboard: hosts unchanged, skipping write")
             return
 
-        dashboard = _build_dashboard_json(snapshot, self.prom_url)
+        version   = sidecar.get("version", 0) + 1
+        dashboard = _build_dashboard_json(current_hosts, version, self._ds_ref)
+
         self.dashboard_path.write_text(json.dumps(dashboard, indent=2))
-        host_count = len(snapshot.get("hosts", []))
-        logger.info(f"aggroboard: wrote dashboard ({host_count} hosts)")
-        self._previous = snapshot
+        _write_sidecar(self.sidecar_path, version, current_hosts)
+
+        added   = set(current_hosts) - set(prev_hosts)
+        removed = set(prev_hosts) - set(current_hosts)
+        logger.info(
+            f"aggroboard: wrote dashboard v{version} "
+            f"({len(current_hosts)} hosts"
+            + (f", +{sorted(added)}" if added else "")
+            + (f", -{sorted(removed)}" if removed else "")
+            + ")"
+        )

@@ -2,11 +2,11 @@
 app.py — bis-theseus Flask application.
 
 Routes:
-  GET /health                        — liveness probe
-  GET /api/host/<instance>           — full host metric summary
-  GET /api/host/<instance>/cpu       — cpu usage pct
-  GET /api/host/<instance>/memory    — memory usage pct
-  GET /api/host/<instance>/disk      — disk usage pct
+  GET /health                           — liveness probe
+  GET /api/host/<instance>              — full host metric summary
+  GET /api/host/<instance>/cpu          — cpu usage pct
+  GET /api/host/<instance>/memory       — memory usage pct
+  GET /api/host/<instance>/disk         — disk usage pct
   GET /api/service/<instance>/<project> — service summary
   GET /api/container/<instance>/<name>  — container summary
   GET /api/container/<instance>/<name>/logs — log tail
@@ -32,19 +32,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Config ───────────────────────────────────────────────────────────────────
-PROM_URL           = os.getenv("THESEUS_PROM_URL", "http://obs-prometheus:9090")
-LOKI_URL           = os.getenv("THESEUS_LOKI_URL", "http://obs-loki:3100")
+# ── Config ────────────────────────────────────────────────────────────────────
+PROM_URL            = os.getenv("THESEUS_PROM_URL", "http://obs-prometheus:9090")
+LOKI_URL            = os.getenv("THESEUS_LOKI_URL", "http://obs-loki:3100")
+GRAFANA_URL         = os.getenv("GRAFANA_URL", "http://obs-grafana:3000")
+GRAFANA_TOKEN       = os.getenv("GRAFANA_TOKEN", "")
 AGGROBOARD_INTERVAL = int(os.getenv("AGGROBOARD_INTERVAL", "60"))
-DASHBOARD_PATH     = Path(
-    os.getenv("DASHBOARD_PATH", "/dashboards/aggroboard.json")
-)
+DASHBOARD_PATH      = Path(os.getenv("DASHBOARD_PATH", "/dashboards/aggroboard.json"))
 
 app = Flask(__name__)
 
 # ── Background task ───────────────────────────────────────────────────────────
-_loop = asyncio.new_event_loop()
-_board = Aggroboard(PROM_URL, LOKI_URL, DASHBOARD_PATH, AGGROBOARD_INTERVAL)
+_loop  = asyncio.new_event_loop()
+_board = Aggroboard(
+    prom_url      = PROM_URL,
+    loki_url      = LOKI_URL,
+    grafana_url   = GRAFANA_URL,
+    grafana_token = GRAFANA_TOKEN,
+    dashboard_path= DASHBOARD_PATH,
+    interval      = AGGROBOARD_INTERVAL,
+)
 
 
 def _start_background():
@@ -61,7 +68,6 @@ _start_background()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _run(coro):
-    """Run a coroutine from a sync Flask route."""
     return asyncio.run_coroutine_threadsafe(coro, _loop).result(timeout=15)
 
 
@@ -72,7 +78,13 @@ def _client():
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return jsonify({"status": "ok", "prom": PROM_URL, "loki": LOKI_URL})
+    return jsonify({
+        "status": "ok",
+        "prom": PROM_URL,
+        "loki": LOKI_URL,
+        "grafana": GRAFANA_URL,
+        "token_set": bool(GRAFANA_TOKEN),
+    })
 
 
 @app.get("/api/host/<instance>")
@@ -128,4 +140,8 @@ def container_logs(instance: str, container_name: str):
     async def _():
         async with _client() as c:
             return await ContainerQuery(instance, container_name, PROM_URL, LOKI_URL).log_tail(c)
-    return jsonify({"instance": instance, "container": container_name, "lines": _run(_())})
+    return jsonify({
+        "instance": instance,
+        "container": container_name,
+        "lines": _run(_()),
+    })
