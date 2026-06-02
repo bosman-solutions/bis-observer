@@ -173,14 +173,15 @@ def build_fs_table(
     h: int,
     size_expr: str,
     avail_expr: str,
+    used_pct_expr: str,
     ds_ref: dict,
     sort_by: str = "Mountpoint",
 ) -> dict:
     """
     Generic filesystem table panel.
 
-    Takes size and available byte queries, derives Used % via Grafana transform.
-    Joins on mountpoint label only — strips device/fstype noise before merge.
+    Three queries: size, available, used%. filterFieldsByName strips device/fstype
+    noise before merge so all three join cleanly on mountpoint alone.
     Reusable for host disks, container volumes, or any mountpoint-keyed data.
 
     Columns: Mountpoint | Used % | Available | Size
@@ -229,72 +230,18 @@ def build_fs_table(
             ],
         },
         "transformations": [
-            # Strip everything except mountpoint before merge — prevents
-            # device/fstype label mismatches from creating duplicate rows.
+            # Keep only mountpoint and values — strips device/fstype/instance
+            # label differences that prevent merge from joining rows correctly.
             {
                 "id": "filterFieldsByName",
                 "options": {
-                    "include": {"pattern": "mountpoint|Value.*|Time"},
+                    "include": {"pattern": "^(mountpoint|Value #A|Value #B|Value #C|Time)$"},
                 },
             },
-            # Merge size and available into one row per mountpoint.
             {
                 "id": "merge",
                 "options": {"reducers": []},
             },
-            # Derive Used % from size and available in-place.
-            {
-                "id": "calculateField",
-                "options": {
-                    "mode": "reduceRow",
-                    "alias": "Used %",
-                    "reduce": {"reducer": "sum"},
-                    "binary": {
-                        "left": "Value #A",
-                        "right": "Value #B",
-                        "reducer": "sum",
-                        "operation": "-",
-                    },
-                },
-            },
-            # Override: Used % = (Size - Available) / Size * 100
-            {
-                "id": "calculateField",
-                "options": {
-                    "mode": "binaryOperation",
-                    "alias": "Used %",
-                    "binary": {
-                        "left": "Value #A",
-                        "right": "Value #B",
-                        "operation": "-",
-                    },
-                },
-            },
-            {
-                "id": "calculateField",
-                "options": {
-                    "mode": "binaryOperation",
-                    "alias": "Used %",
-                    "binary": {
-                        "left": "Used %",
-                        "right": "Value #A",
-                        "operation": "/",
-                    },
-                },
-            },
-            {
-                "id": "calculateField",
-                "options": {
-                    "mode": "binaryOperation",
-                    "alias": "Used %",
-                    "binary": {
-                        "left": "Used %",
-                        "right": "100",
-                        "operation": "*",
-                    },
-                },
-            },
-            # Rename, reorder, exclude noise.
             {
                 "id": "organize",
                 "options": {
@@ -302,22 +249,16 @@ def build_fs_table(
                         "mountpoint": "Mountpoint",
                         "Value #A": "Size",
                         "Value #B": "Available",
+                        "Value #C": "Used %",
                     },
                     "indexByName": {
                         "mountpoint": 0,
-                        "Used %": 1,
+                        "Value #C": 1,
                         "Value #B": 2,
                         "Value #A": 3,
                     },
                     "excludeByName": {
                         "Time": True,
-                        "instance": True,
-                        "job": True,
-                        "fstype": True,
-                        "device": True,
-                        "__name__": True,
-                        "environment": True,
-                        "node": True,
                     },
                 },
             },
@@ -339,6 +280,14 @@ def build_fs_table(
                 "refId": "B",
                 "format": "table",
             },
+            {
+                "datasource": ds_ref,
+                "expr": used_pct_expr,
+                "instant": True,
+                "legendFormat": "{{mountpoint}}",
+                "refId": "C",
+                "format": "table",
+            },
         ],
         "datasource": ds_ref,
     }
@@ -351,13 +300,17 @@ def _disk_table_panel(
     fsfilter = f'fstype!~"{EXCLUDE_FSTYPES}"'
 
     return build_fs_table(
-        panel_id  = panel_id,
-        title     = "Disk",
+        panel_id     = panel_id,
+        title        = "Disk",
         x=x, y=y,
         w=DISK_W, h=DISK_H,
-        size_expr = f'node_filesystem_size_bytes{{{label},{fsfilter}}}',
-        avail_expr= f'node_filesystem_avail_bytes{{{label},{fsfilter}}}',
-        ds_ref    = ds_ref,
+        size_expr    = f'node_filesystem_size_bytes{{{label},{fsfilter}}}',
+        avail_expr   = f'node_filesystem_avail_bytes{{{label},{fsfilter}}}',
+        used_pct_expr= (
+            f'100 - ((node_filesystem_avail_bytes{{{label},{fsfilter}}} / '
+            f'node_filesystem_size_bytes{{{label},{fsfilter}}}) * 100)'
+        ),
+        ds_ref       = ds_ref,
     )
 
 
