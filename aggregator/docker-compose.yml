@@ -85,6 +85,29 @@ services:
     networks:
       - aggregator
 
+  # --------------------------------------------------------------------------
+  # THESEUS — intelligence layer
+  # Query factory API + aggroboard heartbeat writer.
+  # Talks to Prometheus and Loki locally. Internal only — no host port binding.
+  # Writes aggroboard.json into the shared Grafana provisioning directory.
+  # --------------------------------------------------------------------------
+  theseus:
+    build: ./theseus
+    container_name: obs-theseus
+    restart: unless-stopped
+    environment:
+      - THESEUS_PROM_URL=http://obs-prometheus:9090
+      - THESEUS_LOKI_URL=http://obs-loki:3100
+      - AGGROBOARD_INTERVAL=${AGGROBOARD_INTERVAL:-60}
+      - DASHBOARD_PATH=/dashboards/aggroboard.json
+    volumes:
+      - ./config/grafana/provisioning/dashboards:/dashboards
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - aggregator
+
 networks:
   aggregator:
     name: obs-aggregator
