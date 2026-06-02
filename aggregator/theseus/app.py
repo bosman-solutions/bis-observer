@@ -87,12 +87,31 @@ def health():
     })
 
 
-@app.get("/api/host/<instance>")
-def host_summary(instance: str):
+@app.get("/api/hosts")
+def all_hosts():
+    """All known hosts with their sidecar data including explore links."""
+    return jsonify(_board.get_all_hosts())
+
+
+@app.get("/api/host/<hostname>")
+def host_summary(hostname: str):
     async def _():
         async with _client() as c:
-            return await HostQuery(instance, PROM_URL, LOKI_URL).summary(c)
+            return await HostQuery(hostname, PROM_URL, LOKI_URL).summary(c)
     return jsonify(_run(_()))
+
+
+@app.get("/api/host/<hostname>/link")
+def host_link(hostname: str):
+    """Return the pre-generated Grafana Explore deeplink for a host."""
+    entry = _board.get_host(hostname)
+    if not entry:
+        return jsonify({"error": f"host {hostname!r} not found in sidecar"}), 404
+    return jsonify({
+        "hostname": hostname,
+        "instance": entry.get("instance"),
+        "explore_url": entry.get("explore_url"),
+    })
 
 
 @app.get("/api/host/<instance>/cpu")

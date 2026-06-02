@@ -7,23 +7,30 @@ Heartbeat loop:
   3. If hosts changed — write new aggroboard.json + update sidecar
   4. If same — do nothing (dashboard stays stable, Grafana won't prompt)
 
-Sidecar (aggroboard_hosts.json) survives restarts — no spurious writes on boot.
-Sidecar starts empty; hosts join and leave automatically.
+Sidecar schema:
+  {
+    "version": 1,
+    "updated_at": 1780433206,
+    "hosts": {
+      "melchior": {
+        "instance": "melchior",
+        "explore_url": "http://melchior:3000/explore?..."
+      }
+    }
+  }
 
-Dashboard layout per host:
-  Row header
-  Row 1: CPU %, Memory %, Load ratio, Uptime — stat panels
-  Row 2: Disk table — real mountpoints only, snap/tmpfs noise filtered
+Hosts become a dict keyed by hostname. Links are generated once on discovery.
 """
 
 import asyncio
 import json
 import logging
-import os
 import time
 from pathlib import Path
 
 import httpx
+
+from .links import host_explore_url
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +46,6 @@ ROW_H  = 2
 # ── Grafana datasource lookup ─────────────────────────────────────────────────
 
 async def _get_prometheus_uid(grafana_url: str, token: str) -> str | None:
-    """
-    Look up the Prometheus datasource UID from Grafana using a service account token.
-    Returns the UID string, or None if unavailable.
-    """
     if not token:
         return None
     try:
@@ -69,14 +72,14 @@ def _read_sidecar(path: Path) -> dict:
     try:
         return json.loads(path.read_text())
     except Exception:
-        return {"version": 0, "hosts": [], "updated_at": 0}
+        return {"version": 0, "updated_at": 0, "hosts": {}}
 
 
-def _write_sidecar(path: Path, version: int, hosts: list[str]) -> None:
+def _write_sidecar(path: Path, version: int, hosts: dict) -> None:
     path.write_text(json.dumps({
         "version": version,
-        "hosts": hosts,
         "updated_at": int(time.time()),
+        "hosts": hosts,
     }, indent=2))
 
 
@@ -234,6 +237,9 @@ def _disk_table_panel(
                         "job": True,
                         "fstype": True,
                         "device": True,
+                        "__name__": True,
+                        "environment": True,
+                        "node": True,
                     },
                 },
             },
@@ -279,13 +285,13 @@ def _row_panel(panel_id: int, title: str, y: int) -> dict:
     }
 
 
-def _build_dashboard_json(hosts: list[str], version: int, ds_ref: dict) -> dict:
+def _build_dashboard_json(hosts: dict, version: int, ds_ref: dict) -> dict:
     panels = []
     panel_id = 1
     y = 0
 
-    for instance in hosts:
-        hostname = instance.split(":")[0]
+    for hostname, host_data in sorted(hosts.items()):
+        instance = host_data.get("instance", hostname)
         label    = f'instance="{instance}"'
 
         panels.append(_row_panel(panel_id, hostname.upper(), y))
@@ -380,11 +386,13 @@ class Aggroboard:
         self.dashboard_path = dashboard_path
         self.sidecar_path   = dashboard_path.parent / "aggroboard_hosts.json"
         self.interval       = interval
+        self._ds_uid: str | None = None
         self._ds_ref: dict  = {"type": "prometheus", "uid": "${datasource}"}
 
     async def _resolve_datasource(self):
         uid = await _get_prometheus_uid(self.grafana_url, self.grafana_token)
         if uid:
+            self._ds_uid = uid
             self._ds_ref = {"type": "prometheus", "uid": uid}
             logger.info(f"datasource locked to uid: {uid}")
         else:
@@ -405,27 +413,55 @@ class Aggroboard:
 
     async def _tick(self):
         async with httpx.AsyncClient() as client:
-            current_hosts = await _get_known_instances(client, self.prom_url)
+            current_instances = await _get_known_instances(client, self.prom_url)
 
-        sidecar   = _read_sidecar(self.sidecar_path)
-        prev_hosts = sidecar.get("hosts", [])
+        sidecar    = _read_sidecar(self.sidecar_path)
+        prev_hosts = sidecar.get("hosts", {})
+        prev_set   = set(prev_hosts.keys())
+        curr_set   = set(current_instances)
 
-        if current_hosts == prev_hosts:
+        if curr_set == prev_set:
             logger.debug("aggroboard: hosts unchanged, skipping write")
             return
 
+        added   = curr_set - prev_set
+        removed = prev_set - curr_set
+
+        # Build new hosts dict — keep existing entries, add new, drop removed
+        new_hosts = {k: v for k, v in prev_hosts.items() if k not in removed}
+
+        for instance in added:
+            hostname = instance.split(":")[0]
+            explore_url = host_explore_url(
+                grafana_url    = self.grafana_url,
+                datasource_uid = self._ds_uid or "prometheus",
+                instance       = instance,
+            )
+            new_hosts[hostname] = {
+                "instance": instance,
+                "explore_url": explore_url,
+            }
+            logger.info(f"aggroboard: new host discovered — {hostname} ({instance})")
+
         version   = sidecar.get("version", 0) + 1
-        dashboard = _build_dashboard_json(current_hosts, version, self._ds_ref)
+        dashboard = _build_dashboard_json(new_hosts, version, self._ds_ref)
 
         self.dashboard_path.write_text(json.dumps(dashboard, indent=2))
-        _write_sidecar(self.sidecar_path, version, current_hosts)
+        _write_sidecar(self.sidecar_path, version, new_hosts)
 
-        added   = set(current_hosts) - set(prev_hosts)
-        removed = set(prev_hosts) - set(current_hosts)
         logger.info(
             f"aggroboard: wrote dashboard v{version} "
-            f"({len(current_hosts)} hosts"
+            f"({len(new_hosts)} hosts"
             + (f", +{sorted(added)}" if added else "")
             + (f", -{sorted(removed)}" if removed else "")
             + ")"
         )
+
+    def get_host(self, hostname: str) -> dict | None:
+        """Return sidecar entry for a host. Used by API routes."""
+        sidecar = _read_sidecar(self.sidecar_path)
+        return sidecar.get("hosts", {}).get(hostname)
+
+    def get_all_hosts(self) -> dict:
+        """Return all host entries from sidecar."""
+        return _read_sidecar(self.sidecar_path).get("hosts", {})
