@@ -17,7 +17,7 @@ AGGREGATOR_DIR := ./aggregator
 HOSTNAME       := $(shell hostname)
 ARCH           := $(shell uname -m)
 
-.PHONY: help collector aggregator kube restart restart-collector restart-aggregator down status
+.PHONY: help collector aggregator theseus kube restart restart-collector restart-aggregator down status
 
 help:
 	@echo ""
@@ -25,6 +25,7 @@ help:
 	@echo ""
 	@echo "  make collector    deploy collector stack (any node in the fleet)"
 	@echo "  make aggregator   deploy aggregator + collector stacks (aggregator node)"
+	@echo "  make theseus      build and deploy obs-theseus intelligence sidecar"
 	@echo "  make kube         bootstrap kube-state-metrics on this k3s/k8s node (idempotent)"
 	@echo "  make restart      restart all running obs stacks on this node"
 	@echo "  make restart-collector  restart collector stack only"
@@ -84,6 +85,11 @@ aggregator: _set_node_name
 	docker compose -f $(AGGREGATOR_DIR)/docker-compose.yml --env-file $(AGGREGATOR_DIR)/.env up -d
 	@echo "✓ Aggregator stack running."
 	@$(MAKE) collector
+
+theseus:
+	@echo "→ Building and deploying obs-theseus..."
+	docker compose -f $(AGGREGATOR_DIR)/docker-compose.yml --env-file $(AGGREGATOR_DIR)/.env up -d --build theseus
+	@echo "✓ obs-theseus running."
 
 # Bootstrap kube-state-metrics on a k3s/k8s node.
 # Idempotent — safe to run multiple times.
