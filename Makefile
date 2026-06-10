@@ -72,6 +72,8 @@ collector: _set_node_name _inject_ksm_config
 		docker compose -f $(COLLECTOR_DIR)/docker-compose.armv7.yml --env-file $(COLLECTOR_DIR)/.env up -d; \
 	else \
 		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env up -d; \
+		echo "  restarting alloy to load config changes (bind mounts don't trigger recreate)..."; \
+		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env restart alloy; \
 	fi
 	@echo "✓ Collector stack running."
 
