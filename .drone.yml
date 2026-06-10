@@ -36,6 +36,7 @@ steps:
       envs:
         - drone_branch
       script:
+        - cd /opt/bis-observer && git checkout -- aggregator/config/grafana/provisioning/dashboards/ 2>/dev/null || true
         - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make collector
 
   - name: deploy-melchior
@@ -50,6 +51,7 @@ steps:
       envs:
         - drone_branch
       script:
+        - cd /opt/bis-observer && git checkout -- aggregator/config/grafana/provisioning/dashboards/ 2>/dev/null || true
         - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make aggregator
 
   # Gaspar is a laptop — online intermittently. failure: ignore means the pipeline
@@ -68,4 +70,5 @@ steps:
       envs:
         - drone_branch
       script:
+        - cd /opt/bis-observer && git checkout -- aggregator/config/grafana/provisioning/dashboards/ 2>/dev/null || true
         - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make collector

@@ -82,7 +82,7 @@ aggregator: _set_node_name
 		echo "         cp $(AGGREGATOR_DIR)/.env.example $(AGGREGATOR_DIR)/.env"; \
 		exit 1; \
 	fi
-	docker compose -f $(AGGREGATOR_DIR)/docker-compose.yml --env-file $(AGGREGATOR_DIR)/.env up -d
+	docker compose -f $(AGGREGATOR_DIR)/docker-compose.yml --env-file $(AGGREGATOR_DIR)/.env up -d --build
 	@echo "✓ Aggregator stack running."
 	@$(MAKE) collector
 

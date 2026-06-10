@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 
 import httpx
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from .telemetry import ContainerQuery, HostQuery, ServiceQuery
 from .aggroboard import Aggroboard
@@ -140,6 +140,16 @@ def host_disk(instance: str):
     return jsonify({"instance": instance, "disk_pct": _run(_())})
 
 
+@app.get("/api/host/<instance>/range")
+def host_range(instance: str):
+    """CPU usage time series — feeds the bis-starmap ECG."""
+    minutes = min(int(request.args.get("minutes", 15)), 180)
+    async def _():
+        async with _client() as c:
+            return await HostQuery(instance, PROM_URL, LOKI_URL).cpu_range(c, minutes=minutes)
+    return jsonify({"instance": instance, "minutes": minutes, "series": _run(_())})
+
+
 @app.get("/api/service/<instance>/<project>")
 def service_summary(instance: str, project: str):
     async def _():
@@ -156,13 +166,27 @@ def container_summary(instance: str, container_name: str):
     return jsonify(_run(_()))
 
 
-@app.get("/api/container/<instance>/<container_name>/logs")
-def container_logs(instance: str, container_name: str):
+@app.get("/api/container/<instance>/<container_name>/range")
+def container_range(instance: str, container_name: str):
+    """Container CPU usage time series — feeds the bis-starmap ECG."""
+    minutes = min(int(request.args.get("minutes", 15)), 180)
     async def _():
         async with _client() as c:
-            return await ContainerQuery(instance, container_name, PROM_URL, LOKI_URL).log_tail(c)
+            return await ContainerQuery(instance, container_name, PROM_URL, LOKI_URL).cpu_range(c, minutes=minutes)
+    return jsonify({"instance": instance, "container": container_name, "minutes": minutes, "series": _run(_())})
+
+
+@app.get("/api/container/<instance>/<container_name>/logs")
+def container_logs(instance: str, container_name: str):
+    """Log tail. Query params: limit (default 100), level (e.g. 'error' or 'warn|error')."""
+    limit = min(int(request.args.get("limit", 100)), 500)
+    level = request.args.get("level") or None
+    async def _():
+        async with _client() as c:
+            return await ContainerQuery(instance, container_name, PROM_URL, LOKI_URL).log_tail(c, limit=limit, level=level)
     return jsonify({
         "instance": instance,
         "container": container_name,
+        "level": level,
         "lines": _run(_()),
     })
