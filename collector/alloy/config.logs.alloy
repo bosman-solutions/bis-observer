@@ -47,13 +47,36 @@ discovery.relabel "docker_meta" {
   }
 }
 
+// -- Process: extract a normalized `level` label (info/warn/error/…) ---------
+// Enables level filtering downstream (Grafana, bis-cadastre log overlay).
+// First level-looking token in the line wins; warning→warn, err/fatal/critical→error.
+// Lines with no recognizable level get no level label.
+loki.process "level_extract" {
+  forward_to = [loki.write.aggregator.receiver]
+
+  stage.regex {
+    expression = "(?i)\\b(?P<level>TRACE|DEBUG|INFO|WARNING|WARN|ERROR|ERR|FATAL|CRITICAL)\\b"
+  }
+
+  stage.template {
+    source   = "level"
+    template = "{{ $v := ToLower .Value }}{{ if eq $v \"warning\" }}warn{{ else if eq $v \"err\" }}error{{ else if eq $v \"fatal\" }}error{{ else if eq $v \"critical\" }}error{{ else }}{{ $v }}{{ end }}"
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+}
+
 // -- Source: Docker container logs via socket --------------------------------
 // Uses Docker API directly — no JSON parsing needed, no file path hacks.
 // Produces standard container_name label for community dashboard compatibility.
 loki.source.docker "docker_logs" {
   host             = "unix:///var/run/docker.sock"
   targets          = discovery.relabel.docker_meta.output
-  forward_to       = [loki.write.aggregator.receiver]
+  forward_to       = [loki.process.level_extract.receiver]
   refresh_interval = "10s"
 }
 
@@ -79,12 +102,12 @@ local.file_match "varlog" {
 
 loki.source.file "syslog_source" {
   targets    = local.file_match.syslog.targets
-  forward_to = [loki.write.aggregator.receiver]
+  forward_to = [loki.process.level_extract.receiver]
 }
 
 loki.source.file "varlog_source" {
   targets    = local.file_match.varlog.targets
-  forward_to = [loki.write.aggregator.receiver]
+  forward_to = [loki.process.level_extract.receiver]
 }
 
 // -- Write: push all logs to aggregator Loki ----------------------------------

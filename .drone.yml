@@ -4,12 +4,12 @@ type: docker
 name: deploy
 
 trigger:
-  branch:
-    - main
   event:
     - push
 
-# Deploys bis-observer to all fleet nodes on push to main.
+# Deploys bis-observer to all fleet nodes on push to ANY branch — the pushed
+# branch is checked out on each node. GitHub Actions (.github/workflows/
+# deploy.yml) additionally deploys main via ansible.
 #
 # Required secrets (set in Drone org settings):
 #   drone_deploy  — SSH private key, authorized on all target nodes
@@ -33,8 +33,10 @@ steps:
       key:
         from_secret: drone_deploy
       port: 22
+      envs:
+        - drone_branch
       script:
-        - cd /opt/bis-observer && git pull origin main && make collector
+        - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make collector
 
   - name: deploy-melchior
     image: appleboy/drone-ssh
@@ -45,8 +47,10 @@ steps:
       key:
         from_secret: drone_deploy
       port: 22
+      envs:
+        - drone_branch
       script:
-        - cd /opt/bis-observer && git pull origin main && make aggregator
+        - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make aggregator
 
   # Gaspar is a laptop — online intermittently. failure: ignore means the pipeline
   # succeeds regardless; deploy runs when he's up, silently skips when he's not.
@@ -61,5 +65,7 @@ steps:
         from_secret: drone_deploy
       port: 22
       connect_timeout: 15s
+      envs:
+        - drone_branch
       script:
-        - cd /opt/bis-observer && git pull origin main && make collector
+        - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make collector
