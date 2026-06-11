@@ -10,3 +10,7 @@ aggregator/targets/*.yml
 # theseus runtime state — generated at runtime, not source of truth
 aggregator/config/grafana/provisioning/dashboards/aggroboard.json
 aggregator/config/grafana/provisioning/dashboards/aggroboard_hosts.json
+
+# Python
+__pycache__/
+*.py[cod]

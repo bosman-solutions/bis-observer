@@ -150,6 +150,25 @@ def host_range(instance: str):
     return jsonify({"instance": instance, "minutes": minutes, "series": _run(_())})
 
 
+@app.get("/api/host/<instance>/logs")
+def host_logs(instance: str):
+    """Host-scope log tail: all containers on the node. Params: limit, level,
+    containers (regex alternation to narrow to a stack's members)."""
+    limit = min(int(request.args.get("limit", 100)), 500)
+    level = request.args.get("level") or None
+    containers = request.args.get("containers") or None
+    async def _():
+        async with _client() as c:
+            return await HostQuery(instance, PROM_URL, LOKI_URL).log_tail(
+                c, limit=limit, level=level, containers=containers)
+    return jsonify({
+        "instance": instance,
+        "level": level,
+        "containers": containers,
+        "lines": _run(_()),
+    })
+
+
 @app.get("/api/service/<instance>/<project>")
 def service_summary(instance: str, project: str):
     async def _():

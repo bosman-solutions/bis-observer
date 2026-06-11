@@ -243,6 +243,20 @@ class HostQuery(TelemetryBase):
             minutes=minutes,
         )
 
+    async def log_tail(
+        self,
+        client: httpx.AsyncClient,
+        limit: int = 100,
+        level: Optional[str] = None,
+        containers: Optional[str] = None,
+    ) -> list[dict]:
+        """All container logs on this host via Loki. `containers` optionally
+        narrows to a regex alternation of container names (stack scope)."""
+        sel = f'node="{self.instance}",container_name=~"{containers or ".+"}"'
+        if level:
+            sel += f',level=~"{level}"'
+        return await self._loki_tail(client, "{" + sel + "}", limit=limit)
+
     async def summary(self, client: httpx.AsyncClient) -> dict:
         """All host metrics in one dict. Used by aggroboard and API."""
         (cpu, mem_pct, disk_pct, swap, load, uptime, mem_bytes, mem_total,
