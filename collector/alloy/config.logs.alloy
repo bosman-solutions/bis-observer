@@ -47,6 +47,37 @@ discovery.relabel "docker_meta" {
   }
 }
 
+// -- Source: remote syslog from slim collector nodes (armv7 pis) --------------
+// The armv7 fleet has no Alloy (no arm/v7 image exists). Their docker daemons
+// ship container logs here via the syslog log-driver over UDP, which keeps
+// log writes off the pi SD cards entirely. Forwarded journald/rsyslog from
+// those hosts lands here too. UDP chosen deliberately: containers start even
+// when the aggregator is down (lossy beats blocked on demo nodes).
+loki.relabel "syslog_remote" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__syslog_message_hostname"]
+    target_label  = "node"
+  }
+
+  rule {
+    source_labels = ["__syslog_message_app_name"]
+    target_label  = "container_name"
+  }
+}
+
+loki.source.syslog "pi_fleet" {
+  listener {
+    address       = "0.0.0.0:1514"
+    protocol      = "udp"
+    syslog_format = "rfc5424"
+    labels        = { job = "syslog-remote", environment = "homelab" }
+  }
+  relabel_rules = loki.relabel.syslog_remote.rules
+  forward_to    = [loki.process.level_extract.receiver]
+}
+
 // -- Process: extract a normalized `level` label (info/warn/error/…) ---------
 // Enables level filtering downstream (Grafana, bis-cadastre log overlay).
 // First level-looking token in the line wins; warning→warn, err/fatal/critical→error.

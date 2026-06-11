@@ -16,6 +16,17 @@
 
 name: obs-collector
 
+# Syslog log-driver: container logs leave the pi over UDP and land in the
+# aggregator's Alloy syslog listener (port 1514) → Loki on the NVMe.
+# Zero log writes on the SD card. UDP so containers start even when the
+# aggregator is unreachable.
+x-pi-syslog: &pi-syslog
+  driver: syslog
+  options:
+    syslog-address: "udp://${AGGREGATOR_HOST}:1514"
+    syslog-format: "rfc5424"
+    tag: "{{.Name}}"
+
 services:
 
   # --------------------------------------------------------------------------
@@ -28,6 +39,7 @@ services:
     restart: unless-stopped
     network_mode: host
     pid: host
+    logging: *pi-syslog
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -49,6 +61,7 @@ services:
     container_name: obs-docker-inventory
     restart: unless-stopped
     network_mode: host
+    logging: *pi-syslog
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
