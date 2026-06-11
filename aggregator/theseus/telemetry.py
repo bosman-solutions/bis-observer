@@ -12,12 +12,22 @@ get present state.
 """
 
 import logging
+import re
 import time
 from typing import Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Identifiers are interpolated into PromQL/LogQL label matchers. Strip anything
+# that could break out of a quoted matcher ('"', '}', '`', backslash, ...).
+# Allowed: alnum, _ . - and | (regex alternation for stack-scope log queries).
+_SAFE_LABEL = re.compile(r"[^A-Za-z0-9_.\-|]")
+
+def scrub(value: Optional[str]) -> Optional[str]:
+    """Sanitize a value destined for a label matcher. None passes through."""
+    return _SAFE_LABEL.sub("", value) if value else value
 
 
 class TelemetryBase:
@@ -122,7 +132,7 @@ class HostQuery(TelemetryBase):
 
     def __init__(self, instance: str, prom_url: str, loki_url: str):
         super().__init__(prom_url, loki_url)
-        self.instance = instance
+        self.instance = scrub(instance)
         self._i = f'instance="{instance}"'
 
     async def cpu_usage_pct(self, client: httpx.AsyncClient) -> Optional[float]:
@@ -252,9 +262,10 @@ class HostQuery(TelemetryBase):
     ) -> list[dict]:
         """All container logs on this host via Loki. `containers` optionally
         narrows to a regex alternation of container names (stack scope)."""
+        containers = scrub(containers)
         sel = f'node="{self.instance}",container_name=~"{containers or ".+"}"'
         if level:
-            sel += f',level=~"{level}"'
+            sel += f',level=~"{scrub(level)}"'
         return await self._loki_tail(client, "{" + sel + "}", limit=limit)
 
     async def summary(self, client: httpx.AsyncClient) -> dict:
@@ -301,8 +312,8 @@ class ServiceQuery(TelemetryBase):
 
     def __init__(self, instance: str, project: str, prom_url: str, loki_url: str):
         super().__init__(prom_url, loki_url)
-        self.instance = instance
-        self.project = project
+        self.instance = scrub(instance)
+        self.project = scrub(project)
         self._base = f'compose_project="{project}",node="{instance.split(":")[0]}"'
 
     async def container_count(self, client: httpx.AsyncClient) -> Optional[int]:
@@ -343,8 +354,8 @@ class ContainerQuery(TelemetryBase):
         self, instance: str, container_name: str, prom_url: str, loki_url: str
     ):
         super().__init__(prom_url, loki_url)
-        self.instance = instance
-        self.container_name = container_name
+        self.instance = scrub(instance)
+        self.container_name = scrub(container_name)
         self._c = f'name="{container_name}"'
         self._host = instance.split(":")[0]
 
@@ -395,7 +406,7 @@ class ContainerQuery(TelemetryBase):
         regex alternation, e.g. "error" or "warn|error"."""
         sel = f'container_name="{self.container_name}",node="{self._host}"'
         if level:
-            sel += f',level=~"{level}"'
+            sel += f',level=~"{scrub(level)}"'
         return await self._loki_tail(client, "{" + sel + "}", limit=limit)
 
     async def summary(self, client: httpx.AsyncClient) -> dict:
