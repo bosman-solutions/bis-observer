@@ -268,10 +268,25 @@ class HostQuery(TelemetryBase):
             sel += f',level=~"{scrub(level)}"'
         return await self._loki_tail(client, "{" + sel + "}", limit=limit)
 
+    async def system_info(self, client: httpx.AsyncClient) -> dict:
+        """uname/OS identity from node-exporter info metrics (fastfetch vibes)."""
+        uname, osinfo = await asyncio.gather(
+            self._prom_query(client, f'node_uname_info{{{self._i}}}'),
+            self._prom_query(client, f'node_os_info{{{self._i}}}'),
+        )
+        u = uname[0]["metric"] if uname else {}
+        o = osinfo[0]["metric"] if osinfo else {}
+        return {
+            "os": o.get("pretty_name"),
+            "kernel": u.get("release"),
+            "arch": u.get("machine"),
+            "nodename": u.get("nodename"),
+        }
+
     async def summary(self, client: httpx.AsyncClient) -> dict:
         """All host metrics in one dict. Used by aggroboard and API."""
         (cpu, mem_pct, disk_pct, swap, load, uptime, mem_bytes, mem_total,
-         net_io, disk_io, mounts) = (
+         net_io, disk_io, mounts, system) = (
             await asyncio.gather(
                 self.cpu_usage_pct(client),
                 self.memory_used_pct(client),
@@ -284,6 +299,7 @@ class HostQuery(TelemetryBase):
                 self.net_io_bps(client),
                 self.disk_io_bps(client),
                 self.mounts(client),
+                self.system_info(client),
             )
         )
         return {
@@ -299,6 +315,7 @@ class HostQuery(TelemetryBase):
             "net_io": net_io,
             "disk_io": disk_io,
             "mounts": mounts,
+            "system": system,
         }
 
 
