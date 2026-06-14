@@ -30,3 +30,9 @@ scrape_configs:
       - files:
           - /etc/prometheus/targets/docker-inventory.yml
         refresh_interval: 30s
+
+  - job_name: kube-state-metrics-pull
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/kube-state-metrics.yml
+        refresh_interval: 30s
