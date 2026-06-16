@@ -16,8 +16,10 @@ COLLECTOR_DIR  := ./collector
 AGGREGATOR_DIR := ./aggregator
 HOSTNAME       := $(shell hostname)
 ARCH           := $(shell uname -m)
+ENVSET         := sh ./scripts/envset.sh      # idempotent KEY=VALUE upsert
+CHECKENV       := sh ./scripts/checkenv.sh     # required-key drift check
 
-.PHONY: help collector aggregator theseus kube restart restart-collector restart-aggregator down status
+.PHONY: help collector aggregator theseus kube check-env restart restart-collector restart-aggregator down status
 
 help:
 	@echo ""
@@ -32,6 +34,7 @@ help:
 	@echo "  make restart-aggregator restart aggregator stack only"
 	@echo "  make down         tear down all running obs stacks on this node"
 	@echo "  make status       show status of all obs stacks"
+	@echo "  make check-env    warn about required keys missing from .env files"
 	@echo ""
 	@echo "  Notes:"
 	@echo "    - Copy .env.example to .env in each stack directory before deploying"
@@ -42,10 +45,11 @@ help:
 	@echo ""
 
 # Stamp NODE_NAME into collector .env if not already set.
+# Upserts in place via envset.sh — never appends blindly (no drift).
 _set_node_name:
-	@if ! grep -qE '^NODE_NAME=[^[:space:]]' $(COLLECTOR_DIR)/.env 2>/dev/null; then \
+	@if [ -f $(COLLECTOR_DIR)/.env ] && ! grep -qE '^NODE_NAME=[^[:space:]]' $(COLLECTOR_DIR)/.env 2>/dev/null; then \
 		echo "  NODE_NAME not set — using hostname: $(HOSTNAME)"; \
-		echo "NODE_NAME=$(HOSTNAME)" >> $(COLLECTOR_DIR)/.env; \
+		$(ENVSET) $(COLLECTOR_DIR)/.env NODE_NAME $(HOSTNAME); \
 	fi
 
 # Inject KSM scrape config if KSM_PORT is set in collector/.env.
@@ -125,13 +129,8 @@ kube:
 	fi
 	$(eval KSM_PORT := $(shell kubectl get svc ksm-nodeport -n monitoring -o jsonpath='{.spec.ports[0].nodePort}'))
 	@echo "  KSM NodePort: $(KSM_PORT)"
-	@if ! grep -qE '^KSM_PORT=' $(COLLECTOR_DIR)/.env 2>/dev/null; then \
-		echo "KSM_PORT=$(KSM_PORT)" >> $(COLLECTOR_DIR)/.env; \
-		echo "✓ KSM_PORT=$(KSM_PORT) written to collector/.env"; \
-	else \
-		sed -i "s/^KSM_PORT=.*/KSM_PORT=$(KSM_PORT)/" $(COLLECTOR_DIR)/.env; \
-		echo "✓ KSM_PORT=$(KSM_PORT) updated in collector/.env"; \
-	fi
+	@$(ENVSET) $(COLLECTOR_DIR)/.env KSM_PORT "$(KSM_PORT)"
+	@echo "✓ KSM_PORT=$(KSM_PORT) set in collector/.env"
 	@echo "✓ kube-state-metrics ready. Run: make collector"
 
 restart-collector:
@@ -172,3 +171,10 @@ status:
 	@echo ""
 	@echo "=== Collector Stack ==="
 	@docker compose -f $(COLLECTOR_DIR)/docker-compose.yml ps 2>/dev/null || echo "  not running"
+
+# Advisory drift check: warn if a required key from .env.example is unset
+# in the corresponding .env. Never blocks — just surfaces missing config.
+check-env:
+	@echo "→ Checking env files..."
+	@$(CHECKENV) $(COLLECTOR_DIR)/.env.example $(COLLECTOR_DIR)/.env
+	@$(CHECKENV) $(AGGREGATOR_DIR)/.env.example $(AGGREGATOR_DIR)/.env
