@@ -1,0 +1,24 @@
+# kube-state-metrics.yml — PULL TARGET for the kube-state-metrics-pull job
+# ============================================================================
+# This is an EXAMPLE. The real file is gitignored (targets/*.yml) and written
+# by Ansible at deploy time.
+#
+# *** DEPLOY THIS ONLY ON THE EDGE AGGREGATOR THAT OWNS THE CLUSTER. ***
+# On any other aggregator (e.g. a LAN aggregator), do NOT write this file.
+# An absent/empty file means the scrape job has zero targets — edge cluster
+# metrics never reach the LAN. This is how "edge stays edge" is enforced at
+# the data layer, on top of the EDGE -X-> LAN firewall rule.
+#
+# Address: the kube-state-metrics NodePort, reachable from the aggregator's
+# Prometheus container via the edge host's own IP. `make kube` prints the
+# NodePort to use after bootstrapping KSM.
+#
+# Labels become series labels in Prometheus / Grafana. `cluster` is the
+# human-readable cluster name (this replaces the old collector-side
+# CLUSTER_NAME — the cluster label now lives with the cluster's target).
+# ============================================================================
+
+- targets:
+    - "10.10.30.10:30800"      # <edge-host-ip>:<ksm-nodeport>
+  labels:
+    cluster: edge-lan          # human-readable cluster name

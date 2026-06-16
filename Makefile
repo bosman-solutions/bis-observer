@@ -52,19 +52,7 @@ _set_node_name:
 		$(ENVSET) $(COLLECTOR_DIR)/.env NODE_NAME $(HOSTNAME); \
 	fi
 
-# Inject KSM scrape config if KSM_PORT is set in collector/.env.
-# Removes the generated file if KSM_PORT is absent — safe to re-run.
-_inject_ksm_config:
-	@if grep -qE '^KSM_PORT=[^[:space:]]' $(COLLECTOR_DIR)/.env 2>/dev/null; then \
-		echo "  KSM_PORT set — injecting kube-state-metrics scrape config..."; \
-		cp $(COLLECTOR_DIR)/alloy/config.ksm.alloy.tpl $(COLLECTOR_DIR)/alloy/config.ksm.alloy; \
-		echo "✓ config.ksm.alloy written."; \
-	else \
-		echo "  KSM_PORT not set — skipping kube-state-metrics scrape config."; \
-		rm -f $(COLLECTOR_DIR)/alloy/config.ksm.alloy; \
-	fi
-
-collector: _set_node_name _inject_ksm_config
+collector: _set_node_name
 	@echo "→ Deploying collector stack..."
 	@if [ ! -f $(COLLECTOR_DIR)/.env ]; then \
 		echo "  ERROR: $(COLLECTOR_DIR)/.env not found."; \
@@ -99,7 +87,11 @@ theseus:
 
 # Bootstrap kube-state-metrics on a k3s/k8s node.
 # Idempotent — safe to run multiple times.
-# After this runs, make collector will pick up KSM_PORT automatically.
+#
+# KSM is ingested by the EDGE AGGREGATOR as a pull target, not by a
+# collector. This target installs KSM + exposes a NodePort, then prints
+# the address to drop into the aggregator's Ansible-managed target file
+# (aggregator/targets/kube-state-metrics.yml). It does not touch any .env.
 kube:
 	@echo "→ Bootstrapping kube-state-metrics..."
 	@if ! helm repo list 2>/dev/null | grep -q prometheus-community; then \
@@ -128,10 +120,17 @@ kube:
 		echo "  ksm-nodeport service already exists."; \
 	fi
 	$(eval KSM_PORT := $(shell kubectl get svc ksm-nodeport -n monitoring -o jsonpath='{.spec.ports[0].nodePort}'))
-	@echo "  KSM NodePort: $(KSM_PORT)"
-	@$(ENVSET) $(COLLECTOR_DIR)/.env KSM_PORT "$(KSM_PORT)"
-	@echo "✓ KSM_PORT=$(KSM_PORT) set in collector/.env"
-	@echo "✓ kube-state-metrics ready. Run: make collector"
+	@echo ""
+	@echo "✓ kube-state-metrics ready."
+	@echo "  NodePort: $(KSM_PORT)"
+	@echo ""
+	@echo "  Point the EDGE aggregator's target file at this endpoint:"
+	@echo "    aggregator/targets/kube-state-metrics.yml"
+	@echo "    - targets: [\"<this-host-ip>:$(KSM_PORT)\"]"
+	@echo "      labels: { cluster: <cluster-name> }"
+	@echo ""
+	@echo "  Do NOT add this target on any LAN aggregator (edge stays edge)."
+	@echo "  See aggregator/targets/kube-state-metrics.yml.example."
 
 restart-collector:
 	@echo "→ Restarting collector stack..."
