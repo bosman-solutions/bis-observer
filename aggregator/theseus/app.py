@@ -69,6 +69,11 @@ _kube = Aggrokube(
 def _start_background():
     import threading
     def runner():
+        # Bind the loop to this thread: asyncio.gather() resolves the loop via
+        # get_event_loop() at construction time, which raises in a worker thread
+        # unless one is set. Keeps _loop running so _run()'s
+        # run_coroutine_threadsafe calls have a live loop to target.
+        asyncio.set_event_loop(_loop)
         _loop.run_until_complete(asyncio.gather(_board.run(), _kube.run()))
     t = threading.Thread(target=runner, daemon=True)
     t.start()
