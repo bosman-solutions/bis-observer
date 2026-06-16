@@ -94,9 +94,8 @@ services:
   #   config.metrics.alloy — node-exporter, cadvisor, docker-inventory, remote_write
   #   config.logs.alloy    — loki.source.docker, syslog, varlog, loki.write
   #
-  # Note: Kubernetes (KSM / cluster) is NOT scraped here. A cluster is a
-  # logical entity, ingested centrally as an aggregator pull target — see
-  # aggregator/config/prometheus.yml (kube-state-metrics-pull).
+  # Kubernetes is not scraped here — a cluster is ingested as an aggregator
+  # pull target (aggregator/config/prometheus.yml).
   #
   # Does two things:
   #   1. Scrapes node-exporter + cadvisor + docker-inventory → remote_write to aggregator

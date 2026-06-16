@@ -31,15 +31,10 @@ scrape_configs:
           - /etc/prometheus/targets/docker-inventory.yml
         refresh_interval: 30s
 
-  # Kubernetes cluster object state (kube-state-metrics), pulled centrally.
-  # A k8s cluster is a logical entity, not a host — so it is ingested as a
-  # pull target here, NOT pushed by any collector.
-  #
-  # EDGE-ONLY: Ansible must populate kube-state-metrics.yml *only* on the
-  # edge aggregator that owns the cluster. On every other aggregator the
-  # file stays absent/empty and this job scrapes nothing — keeping edge
-  # data on the edge (edge stays edge; EDGE -X-> LAN).
-  # See targets/kube-state-metrics.yml.example for the target shape.
+  # Kubernetes cluster state (kube-state-metrics) — a cluster is ingested as a
+  # pull target, not pushed by a collector. Target file is provisioned by
+  # Ansible on the aggregator that owns the cluster; absent/empty elsewhere, so
+  # the job scrapes nothing. See targets/kube-state-metrics.yml.example.
   - job_name: kube-state-metrics-pull
     file_sd_configs:
       - files:

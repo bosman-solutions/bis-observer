@@ -120,17 +120,9 @@ kube:
 		echo "  ksm-nodeport service already exists."; \
 	fi
 	$(eval KSM_PORT := $(shell kubectl get svc ksm-nodeport -n monitoring -o jsonpath='{.spec.ports[0].nodePort}'))
-	@echo ""
-	@echo "✓ kube-state-metrics ready."
-	@echo "  NodePort: $(KSM_PORT)"
-	@echo ""
-	@echo "  Point the EDGE aggregator's target file at this endpoint:"
-	@echo "    aggregator/targets/kube-state-metrics.yml"
-	@echo "    - targets: [\"<this-host-ip>:$(KSM_PORT)\"]"
-	@echo "      labels: { cluster: <cluster-name> }"
-	@echo ""
-	@echo "  Do NOT add this target on any LAN aggregator (edge stays edge)."
-	@echo "  See aggregator/targets/kube-state-metrics.yml.example."
+	@echo "✓ kube-state-metrics ready — NodePort $(KSM_PORT)"
+	@echo "  Aggregator target: aggregator/targets/kube-state-metrics.yml"
+	@echo "  Shape: aggregator/targets/kube-state-metrics.yml.example"
 
 restart-collector:
 	@echo "→ Restarting collector stack..."

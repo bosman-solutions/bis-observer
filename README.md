@@ -65,28 +65,24 @@ make aggregator           # starts aggregator + collector (self-monitoring)
 
 ### k3s / Kubernetes cluster
 
-A Kubernetes cluster is a logical entity, not a host, so it is **not** scraped
-by a collector. The **edge aggregator** that owns the cluster ingests it as a
-pull target — keeping cluster data on the edge (edge stays edge).
+A cluster is ingested by the aggregator as a pull target, not by a collector.
 
 ```bash
 make kube                 # on the cluster: bootstrap kube-state-metrics (idempotent)
 ```
 
 `make kube` installs kube-state-metrics via Helm, exposes it on a NodePort, and
-prints the `<host-ip>:<nodeport>` to use. Point the edge aggregator's
-Ansible-managed target file at it:
+reports the `<host-ip>:<nodeport>`. The aggregator's target file points at it:
 
 ```yaml
-# aggregator/targets/kube-state-metrics.yml   (edge aggregator ONLY)
-- targets: ["<edge-host-ip>:<ksm-nodeport>"]
+# aggregator/targets/kube-state-metrics.yml
+- targets: ["<host-ip>:<ksm-nodeport>"]
   labels: { cluster: <cluster-name> }
 ```
 
-Prometheus picks it up via the `kube-state-metrics-pull` job, and theseus's
-`aggrokube` builds the cluster dashboard from it. Do **not** create this target
-file on a LAN aggregator — an absent file means zero targets, which is how
-`EDGE -X-> LAN` is enforced at the data layer.
+The `kube-state-metrics-pull` job scrapes it and theseus `aggrokube` builds the
+cluster dashboard. Target files are provisioned per-aggregator by Ansible; an
+aggregator with no such file scrapes no cluster.
 See `aggregator/targets/kube-state-metrics.yml.example`.
 
 ### Grafana
@@ -125,7 +121,7 @@ make help               show available targets
 | AGGREGATOR_LOKI_PORT |          | 3100            | Must match aggregator's Loki port                  |
 
 Kubernetes is not configured here — see the k3s section above. Cluster scrape
-targets (and the `cluster` label) live in the edge aggregator's
+targets (and the `cluster` label) live in the aggregator's
 `targets/kube-state-metrics.yml`, not in any collector `.env`.
 
 ### aggregator/.env
@@ -158,7 +154,7 @@ bis-observer/
     ├── docker-compose.yml
     ├── .env.example
     ├── targets/
-    │   └── kube-state-metrics.yml.example   # edge-only KSM pull target shape
+    │   └── kube-state-metrics.yml.example   # KSM pull target shape
     └── config/
         ├── prometheus.yml            # includes kube-state-metrics-pull (file_sd, edge-gated)
         ├── loki.yml
@@ -179,5 +175,5 @@ bis-observer/
 - Adding a new node to the fleet: copy the `collector/` directory,
   set `AGGREGATOR_HOST`, run `make collector`. That's it.
 - For a k3s cluster: run `make kube` on the cluster, then add its
-  `targets/kube-state-metrics.yml` on the edge aggregator only.
+  `targets/kube-state-metrics.yml` on the aggregator that owns it.
 - Tested on: Raspbian Trixie, Arch Linux, Ubuntu. Any Linux with Docker works.
