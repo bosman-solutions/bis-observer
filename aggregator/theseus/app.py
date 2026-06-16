@@ -24,6 +24,7 @@ from flask import Flask, jsonify, request
 
 from .telemetry import ContainerQuery, HostQuery, ServiceQuery
 from .aggroboard import Aggroboard
+from .aggrokube import Aggrokube
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +41,7 @@ GRAFANA_EXTERNAL_URL = os.getenv("GRAFANA_EXTERNAL_URL", GRAFANA_URL)
 GRAFANA_TOKEN       = os.getenv("GRAFANA_TOKEN", "")
 AGGROBOARD_INTERVAL = int(os.getenv("AGGROBOARD_INTERVAL", "60"))
 DASHBOARD_PATH      = Path(os.getenv("DASHBOARD_PATH", "/dashboards/aggroboard.json"))
+AGGROKUBE_PATH      = DASHBOARD_PATH.parent / "aggrokube.json"
 
 app = Flask(__name__)
 
@@ -54,15 +56,23 @@ _board = Aggroboard(
     dashboard_path   = DASHBOARD_PATH,
     interval         = AGGROBOARD_INTERVAL,
 )
+_kube = Aggrokube(
+    prom_url         = PROM_URL,
+    grafana_url      = GRAFANA_URL,
+    grafana_ext_url  = GRAFANA_EXTERNAL_URL,
+    grafana_token    = GRAFANA_TOKEN,
+    dashboard_path   = AGGROKUBE_PATH,
+    interval         = AGGROBOARD_INTERVAL,
+)
 
 
 def _start_background():
     import threading
     def runner():
-        _loop.run_until_complete(_board.run())
+        _loop.run_until_complete(asyncio.gather(_board.run(), _kube.run()))
     t = threading.Thread(target=runner, daemon=True)
     t.start()
-    logger.info("aggroboard background task started")
+    logger.info("aggroboard + aggrokube background tasks started")
 
 
 _start_background()
