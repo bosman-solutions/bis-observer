@@ -25,6 +25,12 @@ Collectors are stateless and identical across all nodes — bare metal, VM,
 Raspberry Pi, whatever runs Docker. The aggregator is the only node that
 needs to be reachable by all collectors.
 
+Two ingestion paths feed the aggregator. Full collectors **push** (remote_write
+for metrics, push for logs) as drawn above. Nodes that can't run Alloy (armv7,
+IoT) and Kubernetes clusters are **pulled** by Prometheus from `file_sd` target
+lists in `aggregator/targets/` (provisioned per-aggregator by Ansible). See the
+k3s section for cluster monitoring.
+
 ## Stack
 
 | Component    | Role                                              | Port (default) |
@@ -35,9 +41,11 @@ needs to be reachable by all collectors.
 | Prometheus   | Metrics store, remote write receiver              | 9090           |
 | Loki         | Log store, push receiver                          | 3100           |
 | Grafana      | Visualization                                     | 3000           |
+| kube-state-metrics | Kubernetes cluster object state (k8s clusters only) | 8080 → NodePort |
 
 Alloy replaces both Promtail and prometheus-agent in a single container.
-Promtail reached end-of-life March 2026.
+Promtail reached end-of-life March 2026. kube-state-metrics is pulled by the
+aggregator that owns a cluster — see the k3s section.
 
 ## Quick Start
 
