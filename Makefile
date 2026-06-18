@@ -93,6 +93,24 @@ theseus:
 # the address to drop into the aggregator's Ansible-managed target file
 # (aggregator/targets/kube-state-metrics.yml). It does not touch any .env.
 kube:
+	@echo "→ Preflight: Kubernetes reachability..."
+	@if ! kubectl cluster-info >/dev/null 2>&1; then \
+		echo ""; \
+		if [ -f /etc/rancher/k3s/k3s.yaml ] && [ ! -r /etc/rancher/k3s/k3s.yaml ]; then \
+			echo "  ✗ k3s kubeconfig is root-only (0600 root:root); $$USER cannot read it."; \
+			echo "    Stage a personal copy (does NOT loosen the root file), then re-run make kube:"; \
+			echo ""; \
+			echo "      mkdir -p ~/.kube"; \
+			echo "      sudo install -o $$USER -g $$USER -m600 /etc/rancher/k3s/k3s.yaml ~/.kube/config"; \
+			echo '      echo '"'"'export KUBECONFIG=$$HOME/.kube/config'"'"' >> ~/.bashrc'; \
+			echo '      export KUBECONFIG=$$HOME/.kube/config'; \
+		else \
+			echo "  ✗ Kubernetes cluster unreachable — is the cluster up and KUBECONFIG set?"; \
+		fi; \
+		echo ""; \
+		exit 1; \
+	fi
+	@echo "  ✓ cluster reachable."
 	@echo "→ Bootstrapping kube-state-metrics..."
 	@if ! helm repo list 2>/dev/null | grep -q prometheus-community; then \
 		echo "  Adding prometheus-community helm repo..."; \

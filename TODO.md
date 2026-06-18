@@ -50,8 +50,9 @@ echo 'export KUBECONFIG=$HOME/.kube/config' >> ~/.bashrc
 ```
 Ansible deploys with `become`, so it is unaffected.
 
-**Proper fix candidate:** `make kube` detects an unreachable cluster + a
-root-only `k3s.yaml` and prints this remediation instead of a raw helm error.
+**Fixed 2026-06-18:** `make kube` now runs a `kubectl cluster-info` preflight;
+on failure with a root-only `k3s.yaml` present it prints the `install` remediation
+and exits cleanly instead of vomiting a raw helm error.
 
 *Logged: 2026-06-16 — Weaver 🕸️*
 
