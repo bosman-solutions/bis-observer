@@ -182,7 +182,7 @@ kube:
 	@mkdir -p $(AGGREGATOR_DIR)/secrets
 	@kubectl get secret obs-cadvisor-reader-token -n monitoring -o jsonpath='{.data.token}'  | base64 -d > $(AGGREGATOR_DIR)/secrets/kube-token
 	@kubectl get secret obs-cadvisor-reader-token -n monitoring -o jsonpath='{.data.ca\.crt}' | base64 -d > $(AGGREGATOR_DIR)/secrets/kube-ca.crt
-	$(eval APISERVER := $(shell kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'))
+	$(eval APISERVER_IP := $(shell kubectl get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null))
 	@echo "✓ cAdvisor reader ready."
 	@echo ""
 	@echo "  ───────────────────────────────────────────────────────────────"
@@ -192,7 +192,11 @@ kube:
 	@echo ""
 	@echo "  On the OWNING aggregator, Ansible should place those two files in"
 	@echo "  aggregator/secrets/ and drop a scrape_configs.d/kube-cadvisor.yml with:"
-	@echo "    apiserver : $(APISERVER)"
+	@if [ -n "$(APISERVER_IP)" ]; then \
+		echo "    apiserver : https://$(APISERVER_IP):6443   (control-plane InternalIP — reachable from the obs-prometheus container; do NOT use 127.0.0.1)"; \
+	else \
+		echo "    apiserver : https://<control-plane-internal-ip>:6443   (kubectl get nodes -o wide; NOT 127.0.0.1 — that's localhost inside the container)"; \
+	fi
 	@echo "    one target entry per node (kubectl get nodes), label cluster=<name>"
 	@echo "  Shape: aggregator/scrape_configs.d/kube-cadvisor.yml.example"
 	@echo "  ───────────────────────────────────────────────────────────────"

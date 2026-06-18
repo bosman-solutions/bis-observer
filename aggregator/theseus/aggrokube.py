@@ -5,10 +5,15 @@ Mirrors the aggroboard heartbeat pattern but sources from kube-state-metrics
 via Prometheus. Writes aggrokube.json into the shared Grafana provisioning
 directory alongside aggroboard.json.
 
+Mirrors what bis-starmap shows (cluster → namespace → workload → pod), in
+dashboard form, auto-adjusting as the fleet changes. Node rows are the capacity
+overlay — the starmap treats the k8s node as a pod attribute, not a tier.
+
 Layout:
-  ROW: CLUSTER OVERVIEW  — nodes ready, pods running, deployments ok, workloads ready, cluster CPU/memory
-  ROW: <node>            — per node: ready status, pod count, allocatable RAM/CPU
-  ROW: <namespace>       — per namespace (non-system): per-workload replica readiness stats, pod phase table, top pods by CPU
+  ROW: CLUSTER OVERVIEW  — nodes ready, pods running, deployments ok, workloads ready, cluster CPU/memory, pod restarts
+  ROW: <node>            — capacity overlay per node: ready status, pod count, allocatable RAM/CPU
+  ROW: <namespace>       — per namespace (non-system): replicas ready, pods running, restarts,
+                           per-workload replica readiness stats, pod phase table, top pods by CPU
 
 Sidecar schema (aggrokube_state.json):
   {
@@ -340,6 +345,16 @@ def _build_dashboard(
         "bytes", x=STAT_W, y=y, ds_ref=ds_ref, decimals=0,
         thresholds=[{"color": "purple", "value": None}])); pid += 1
 
+    # Pod restarts — the starmap's per-pod "unhappiness" signal, rolled up.
+    panels.append(_stat(pid, "Pod Restarts",
+        'sum(kube_pod_container_status_restarts_total)',
+        "short", x=STAT_W*2, y=y, ds_ref=ds_ref, decimals=0,
+        thresholds=[
+            {"color": "green",  "value": None},
+            {"color": "yellow", "value": 1},
+            {"color": "red",    "value": 20},
+        ])); pid += 1
+
     y += STAT_H
 
     # ── Per-node rows ─────────────────────────────────────────────────────────
@@ -392,6 +407,15 @@ def _build_dashboard(
             f'count(kube_pod_status_phase{{namespace="{ns}",phase="Running"}})',
             "short", x=STAT_W, y=y, ds_ref=ds_ref,
             thresholds=[{"color": "green", "value": None}])); pid += 1
+
+        panels.append(_stat(pid, "Restarts",
+            f'sum(kube_pod_container_status_restarts_total{{namespace="{ns}"}})',
+            "short", x=STAT_W*2, y=y, ds_ref=ds_ref, decimals=0,
+            thresholds=[
+                {"color": "green",  "value": None},
+                {"color": "yellow", "value": 1},
+                {"color": "red",    "value": 20},
+            ])); pid += 1
 
         y += STAT_H
 
