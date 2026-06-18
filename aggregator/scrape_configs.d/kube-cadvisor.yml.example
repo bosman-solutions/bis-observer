@@ -1,0 +1,59 @@
+# kube-cadvisor.yml — per-pod CPU/memory/network from each node's kubelet
+# cAdvisor, reached through the kube-apiserver proxy.
+#
+# WHY this lives here and not in prometheus.yml:
+#   This job carries credentials (a ServiceAccount bearer token + the cluster
+#   CA). Those files exist only on the aggregator that owns the cluster. A
+#   missing ca_file fails Prometheus config load — so a credentialed job in the
+#   fleet-shared prometheus.yml would brick every cluster-less aggregator. By
+#   living in scrape_configs.d/ (Ansible drops it only on the owning aggregator)
+#   the credential can never break a LAN aggregator. prometheus.yml globs this
+#   directory; zero files = no-op.
+#
+# WHY the apiserver proxy (not scraping kubelets directly):
+#   One reachable endpoint (the apiserver) fans out to every node's cadvisor via
+#   the /proxy subresource. Workers run nothing extra and need no inbound ports.
+#
+# Provisioned by Ansible into /etc/prometheus/scrape_configs.d/ on the owning
+# aggregator. The token + CA + apiserver endpoint come from `make kube` on the
+# cluster (it bootstraps the ServiceAccount/RBAC and prints them).
+#
+# One target entry PER NODE. All entries point __address__ at the SAME apiserver;
+# the per-entry `node` label both (a) keeps the targets distinct and (b) is
+# rewritten into the cadvisor proxy path below. `cluster` is carried onto every
+# series so multi-cluster aggregators stay disambiguated.
+
+- job_name: kube-cadvisor-pull
+  scheme: https
+  authorization:
+    type: Bearer
+    credentials_file: /etc/prometheus/secrets/kube-token
+  tls_config:
+    ca_file: /etc/prometheus/secrets/kube-ca.crt
+    # The apiserver cert is issued for the in-cluster service name, not the IP
+    # you scrape. Set server_name to the cert SAN, or skip verification on a
+    # trusted LAN/WireGuard link. Pick ONE:
+    server_name: kubernetes.default.svc
+    # insecure_skip_verify: true
+  static_configs:
+    - targets: ["10.0.0.10:6443"]
+      labels: { cluster: arcade, node: cerberus }
+    - targets: ["10.0.0.10:6443"]
+      labels: { cluster: arcade, node: fido }
+    - targets: ["10.0.0.10:6443"]
+      labels: { cluster: arcade, node: princess }
+  relabel_configs:
+    # Rewrite the scrape path to this node's kubelet cadvisor proxy endpoint.
+    # metrics_path is per-job, so we build it per-target from the `node` label.
+    - source_labels: [node]
+      target_label: __metrics_path__
+      replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+  metric_relabel_configs:
+    # cAdvisor is high-cardinality. Drop labels bis-cadastre / theseus never
+    # query (container id, image, the verbose name). namespace/pod/container,
+    # plus the node/cluster target labels, are what we keep.
+    - regex: (id|image|name)
+      action: labeldrop
+    # Drop the empty-container and pause-container cgroup roll-ups at ingestion
+    # is NOT done here (we keep them) — queries filter container!="",container!="POD"
+    # so both raw and rolled-up series remain available for other uses.

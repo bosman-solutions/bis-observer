@@ -10,6 +10,9 @@ Routes:
   GET /api/service/<instance>/<project> — service summary
   GET /api/container/<instance>/<name>  — container summary
   GET /api/container/<instance>/<name>/logs — log tail
+  GET /api/pod/<namespace>/<pod>        — pod summary
+  GET /api/pod/<namespace>/<pod>/range  — pod cpu usage time series
+  GET /api/pod/<namespace>/<pod>/logs   — pod log tail
 
 Aggroboard runs as a background asyncio task on startup.
 """
@@ -22,7 +25,7 @@ from pathlib import Path
 import httpx
 from flask import Flask, jsonify, request
 
-from .telemetry import ContainerQuery, HostQuery, ServiceQuery
+from .telemetry import ContainerQuery, HostQuery, ServiceQuery, PodQuery
 from .aggroboard import Aggroboard
 from .aggrokube import Aggrokube
 
@@ -221,6 +224,40 @@ def container_logs(instance: str, container_name: str):
     return jsonify({
         "instance": instance,
         "container": container_name,
+        "level": level,
+        "lines": _run(_()),
+    })
+
+
+@app.get("/api/pod/<namespace>/<pod>")
+def pod_summary(namespace: str, pod: str):
+    async def _():
+        async with _client() as c:
+            return await PodQuery(namespace, pod, PROM_URL, LOKI_URL).summary(c)
+    return jsonify(_run(_()))
+
+
+@app.get("/api/pod/<namespace>/<pod>/range")
+def pod_range(namespace: str, pod: str):
+    """Pod CPU usage time series — feeds the bis-starmap ECG."""
+    minutes = min(int(request.args.get("minutes", 15)), 180)
+    async def _():
+        async with _client() as c:
+            return await PodQuery(namespace, pod, PROM_URL, LOKI_URL).cpu_range(c, minutes=minutes)
+    return jsonify({"namespace": namespace, "pod": pod, "minutes": minutes, "series": _run(_())})
+
+
+@app.get("/api/pod/<namespace>/<pod>/logs")
+def pod_logs(namespace: str, pod: str):
+    """Pod log tail. Query params: limit (default 100), level (e.g. 'error' or 'warn|error')."""
+    limit = min(int(request.args.get("limit", 100)), 500)
+    level = request.args.get("level") or None
+    async def _():
+        async with _client() as c:
+            return await PodQuery(namespace, pod, PROM_URL, LOKI_URL).log_tail(c, limit=limit, level=level)
+    return jsonify({
+        "namespace": namespace,
+        "pod": pod,
         "level": level,
         "lines": _run(_()),
     })

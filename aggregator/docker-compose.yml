@@ -29,6 +29,12 @@ services:
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./targets:/etc/prometheus/targets:ro
+      # Credentialed scrape jobs + their secrets, provisioned by Ansible ONLY
+      # on the aggregator that owns a cluster. Empty/absent elsewhere — Docker
+      # auto-creates the bind source as an empty dir, and the scrape_config_files
+      # glob matches nothing, so this is a no-op on cluster-less aggregators.
+      - ./scrape_configs.d:/etc/prometheus/scrape_configs.d:ro
+      - ./secrets:/etc/prometheus/secrets:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

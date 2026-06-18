@@ -123,6 +123,61 @@ kube:
 	@echo "✓ kube-state-metrics ready — NodePort $(KSM_PORT)"
 	@echo "  Aggregator target: aggregator/targets/kube-state-metrics.yml"
 	@echo "  Shape: aggregator/targets/kube-state-metrics.yml.example"
+	@echo ""
+	@echo "→ Bootstrapping cAdvisor reader (per-pod CPU/mem via apiserver proxy)..."
+	@echo "  Applying ServiceAccount + RBAC (nodes/proxy, nodes/metrics)..."
+	@printf '%s\n' \
+		'apiVersion: v1' \
+		'kind: ServiceAccount' \
+		'metadata: { name: obs-cadvisor-reader, namespace: monitoring }' \
+		'---' \
+		'apiVersion: rbac.authorization.k8s.io/v1' \
+		'kind: ClusterRole' \
+		'metadata: { name: obs-cadvisor-reader }' \
+		'rules:' \
+		'- apiGroups: [""]' \
+		'  resources: ["nodes/proxy", "nodes/metrics", "nodes/stats"]' \
+		'  verbs: ["get", "list"]' \
+		'---' \
+		'apiVersion: rbac.authorization.k8s.io/v1' \
+		'kind: ClusterRoleBinding' \
+		'metadata: { name: obs-cadvisor-reader }' \
+		'roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: obs-cadvisor-reader }' \
+		'subjects:' \
+		'- kind: ServiceAccount' \
+		'  name: obs-cadvisor-reader' \
+		'  namespace: monitoring' \
+		'---' \
+		'apiVersion: v1' \
+		'kind: Secret' \
+		'metadata:' \
+		'  name: obs-cadvisor-reader-token' \
+		'  namespace: monitoring' \
+		'  annotations: { kubernetes.io/service-account.name: obs-cadvisor-reader }' \
+		'type: kubernetes.io/service-account-token' \
+		| kubectl apply -f -
+	@echo "  Waiting for the token controller to populate the secret..."
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+		kubectl get secret obs-cadvisor-reader-token -n monitoring -o jsonpath='{.data.token}' 2>/dev/null | grep -q . && break; \
+		sleep 1; \
+	done
+	@mkdir -p $(AGGREGATOR_DIR)/secrets
+	@kubectl get secret obs-cadvisor-reader-token -n monitoring -o jsonpath='{.data.token}'  | base64 -d > $(AGGREGATOR_DIR)/secrets/kube-token
+	@kubectl get secret obs-cadvisor-reader-token -n monitoring -o jsonpath='{.data.ca\.crt}' | base64 -d > $(AGGREGATOR_DIR)/secrets/kube-ca.crt
+	$(eval APISERVER := $(shell kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'))
+	@echo "✓ cAdvisor reader ready."
+	@echo ""
+	@echo "  ───────────────────────────────────────────────────────────────"
+	@echo "  Wrote (gitignored, staged for the aggregator that owns this cluster):"
+	@echo "    $(AGGREGATOR_DIR)/secrets/kube-token"
+	@echo "    $(AGGREGATOR_DIR)/secrets/kube-ca.crt"
+	@echo ""
+	@echo "  On the OWNING aggregator, Ansible should place those two files in"
+	@echo "  aggregator/secrets/ and drop a scrape_configs.d/kube-cadvisor.yml with:"
+	@echo "    apiserver : $(APISERVER)"
+	@echo "    one target entry per node (kubectl get nodes), label cluster=<name>"
+	@echo "  Shape: aggregator/scrape_configs.d/kube-cadvisor.yml.example"
+	@echo "  ───────────────────────────────────────────────────────────────"
 
 restart-collector:
 	@echo "→ Restarting collector stack..."

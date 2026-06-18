@@ -57,20 +57,30 @@ root-only `k3s.yaml` and prints this remediation instead of a raw helm error.
 
 ## Planned
 
-### Kubelet per-pod usage via apiserver proxy
-KSM gives cluster *object state*; not per-pod CPU/memory. Add a second pull job
-that scrapes each node's kubelet **through the kube-apiserver proxy**
-(`/api/v1/nodes/<node>/proxy/metrics/cadvisor`), so every node is reachable from
-one endpoint and workers run nothing extra. Carries a ServiceAccount token +
-TLS — verify a credentialed job cannot fail a LAN aggregator's config load
-before adding it to the shared `prometheus.yml`.
-
 ### Push/pull inventory reconciliation
 Cross-check what collectors remote_write against what the aggregator pulls from
 `/targets`, so nothing is double-counted or silently missed.
 
-### aggrokube: de-hardcode the workload panel
-`aggrokube.py` hardcodes `namespace="arcade", deployment="puzzu"` in a stat
-panel. Make it discovery-driven so the dashboard is cluster-agnostic.
+### k8s pod log shipping
+Per-pod metrics now exist (cadvisor pull) but pod *logs* are not yet ingested —
+the collector Alloy ships Docker logs, not k8s pod logs. theseus `PodQuery.log_tail`
+is wired but returns empty until a k8s log path lands (Alloy `loki.source.kubernetes`
+in-cluster, or apiserver-proxied kubelet logs). Decide the pattern before building.
 
 *Logged: 2026-06-16 — Weaver 🕸️*
+
+## Done
+
+### Kubelet per-pod usage via apiserver proxy — 2026-06-18
+Shipped as the `kube-cadvisor-pull` job in `scrape_configs.d/` (not the shared
+`prometheus.yml` — the credential-safety concern was real: a missing `ca_file`
+fails config load, so the credentialed job is isolated to the owning aggregator via
+`scrape_config_files`, where a missing secret can never break a LAN aggregator).
+`make kube` bootstraps the `obs-cadvisor-reader` SA + RBAC + token. theseus exposes
+the data through `PodQuery` / `/api/pod/*`.
+
+### aggrokube: de-hardcode the workload panel — 2026-06-18
+Done. `aggrokube.py` discovers Deployments/StatefulSets/DaemonSets from KSM labels
+and renders per-workload readiness; `arcade`/`puzzu` hardcoding removed.
+
+*Logged: 2026-06-18 — Weaver 🕸️*

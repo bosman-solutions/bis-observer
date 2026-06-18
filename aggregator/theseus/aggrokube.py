@@ -6,16 +6,17 @@ via Prometheus. Writes aggrokube.json into the shared Grafana provisioning
 directory alongside aggroboard.json.
 
 Layout:
-  ROW: CLUSTER OVERVIEW  — nodes ready, pods running, deployments ok, puzzu replicas
+  ROW: CLUSTER OVERVIEW  — nodes ready, pods running, deployments ok, workloads ready, cluster CPU/memory
   ROW: <node>            — per node: ready status, pod count, allocatable RAM/CPU
-  ROW: <namespace>       — per namespace (non-system): deployment replicas, pod phase table
+  ROW: <namespace>       — per namespace (non-system): per-workload replica readiness stats, pod phase table, top pods by CPU
 
 Sidecar schema (aggrokube_state.json):
   {
     "version": 1,
     "updated_at": 1781446000,
     "nodes": ["cerberus", "fido", "princess", "rex"],
-    "namespaces": ["arcade", "monitoring"]
+    "namespaces": ["arcade", "monitoring"],
+    "workloads": ["arcade/Deployment/puzzu", "arcade/StatefulSet/redis", "monitoring/DaemonSet/fluentd"]
   }
 """
 
@@ -60,8 +61,11 @@ async def _query(client: httpx.AsyncClient, prom_url: str, promql: str) -> list[
 
 async def _discover_cluster(
     client: httpx.AsyncClient, prom_url: str
-) -> tuple[list[str], list[str]]:
-    """Return (node_names, namespace_names) from live KSM data."""
+) -> tuple[list[str], list[str], dict[str, list[dict]]]:
+    """Return (node_names, namespace_names, workloads_by_ns) from live KSM data.
+
+    workloads_by_ns: dict[namespace] -> list[{"kind": str, "name": str}], sorted deterministically.
+    """
     node_results = await _query(client, prom_url, "kube_node_info")
     nodes = sorted({r["metric"].get("node", "") for r in node_results if r["metric"].get("node")})
 
@@ -81,7 +85,38 @@ async def _discover_cluster(
             if r["metric"].get("namespace") and r["metric"].get("namespace") not in SYSTEM_NAMESPACES
         })
 
-    return nodes, namespaces
+    # Discover workloads by namespace
+    workloads_by_ns: dict[str, list[dict]] = {ns: [] for ns in namespaces}
+
+    # Query Deployments
+    dep_results = await _query(client, prom_url, "kube_deployment_labels")
+    for r in dep_results:
+        ns = r["metric"].get("namespace", "")
+        name = r["metric"].get("deployment", "")
+        if ns in workloads_by_ns and name:
+            workloads_by_ns[ns].append({"kind": "Deployment", "name": name})
+
+    # Query StatefulSets
+    sts_results = await _query(client, prom_url, "kube_statefulset_labels")
+    for r in sts_results:
+        ns = r["metric"].get("namespace", "")
+        name = r["metric"].get("statefulset", "")
+        if ns in workloads_by_ns and name:
+            workloads_by_ns[ns].append({"kind": "StatefulSet", "name": name})
+
+    # Query DaemonSets
+    ds_results = await _query(client, prom_url, "kube_daemonset_labels")
+    for r in ds_results:
+        ns = r["metric"].get("namespace", "")
+        name = r["metric"].get("daemonset", "")
+        if ns in workloads_by_ns and name:
+            workloads_by_ns[ns].append({"kind": "DaemonSet", "name": name})
+
+    # Sort each namespace's workloads deterministically
+    for ns in workloads_by_ns:
+        workloads_by_ns[ns] = sorted(workloads_by_ns[ns], key=lambda w: (w["kind"], w["name"]))
+
+    return nodes, namespaces, workloads_by_ns
 
 
 # ── Sidecar helpers ───────────────────────────────────────────────────────────
@@ -90,15 +125,16 @@ def _read_sidecar(path: Path) -> dict:
     try:
         return json.loads(path.read_text())
     except Exception:
-        return {"version": 0, "updated_at": 0, "nodes": [], "namespaces": []}
+        return {"version": 0, "updated_at": 0, "nodes": [], "namespaces": [], "workloads": []}
 
 
-def _write_sidecar(path: Path, version: int, nodes: list[str], namespaces: list[str]) -> None:
+def _write_sidecar(path: Path, version: int, nodes: list[str], namespaces: list[str], workloads: list[str]) -> None:
     path.write_text(json.dumps({
         "version": version,
         "updated_at": int(time.time()),
         "nodes": nodes,
         "namespaces": namespaces,
+        "workloads": workloads,
     }, indent=2))
 
 
@@ -214,11 +250,47 @@ def _pod_phase_table(panel_id: int, namespace: str, x: int, y: int, ds_ref: dict
     }
 
 
+def _top_pods_by_cpu_table(panel_id: int, namespace: str, x: int, y: int, ds_ref: dict) -> dict:
+    """Table showing top 5 pods by CPU usage in a namespace."""
+    return {
+        "id": panel_id,
+        "type": "table",
+        "title": f"{namespace} — top pods by CPU",
+        "gridPos": {"x": x, "y": y, "w": TABLE_W, "h": TABLE_H},
+        "options": {"cellHeight": "sm", "footer": {"show": False}},
+        "fieldConfig": {
+            "defaults": {"custom": {"align": "auto", "displayMode": "auto"}, "unit": "short"},
+            "overrides": [],
+        },
+        "transformations": [
+            {"id": "filterFieldsByName", "options": {"include": {"pattern": "^(pod|Value|Time)$"}}},
+            {"id": "merge", "options": {"reducers": []}},
+            {"id": "organize", "options": {
+                "renameByName": {"pod": "Pod", "Value": "CPU cores"},
+                "indexByName": {"pod": 0, "Value": 1},
+                "excludeByName": {"Time": True},
+            }},
+        ],
+        "targets": [
+            {
+                "datasource": ds_ref,
+                "expr": f'topk(5, sum by (pod) (rate(container_cpu_usage_seconds_total{{namespace="{namespace}",container!="",container!="POD"}}[5m])))',
+                "instant": True,
+                "legendFormat": "{{{{pod}}}}",
+                "refId": "A",
+                "format": "table",
+            }
+        ],
+        "datasource": ds_ref,
+    }
+
+
 # ── Dashboard builder ─────────────────────────────────────────────────────────
 
 def _build_dashboard(
     nodes: list[str],
     namespaces: list[str],
+    workloads_by_ns: dict[str, list[dict]],
     version: int,
     ds_ref: dict,
 ) -> dict:
@@ -247,15 +319,26 @@ def _build_dashboard(
             {"color": "green",  "value": 1.0},
         ])); pid += 1
 
-    panels.append(_stat(pid, "puzzu replicas",
-        'kube_deployment_status_replicas_ready{namespace="arcade",deployment="puzzu"}'
-        ' / kube_deployment_status_replicas{namespace="arcade",deployment="puzzu"}',
+    panels.append(_stat(pid, "Workloads Ready",
+        'sum(kube_deployment_status_replicas_ready) / sum(kube_deployment_status_replicas)',
         "percentunit", x=STAT_W*3, y=y, ds_ref=ds_ref, decimals=0,
         thresholds=[
             {"color": "red",    "value": None},
             {"color": "yellow", "value": 0.5},
             {"color": "green",  "value": 1.0},
         ])); pid += 1
+
+    y += STAT_H
+
+    panels.append(_stat(pid, "Cluster CPU cores",
+        'sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m]))',
+        "short", x=0, y=y, ds_ref=ds_ref, decimals=1,
+        thresholds=[{"color": "blue", "value": None}])); pid += 1
+
+    panels.append(_stat(pid, "Cluster Mem",
+        'sum(container_memory_working_set_bytes{container!="",container!="POD"})',
+        "bytes", x=STAT_W, y=y, ds_ref=ds_ref, decimals=0,
+        thresholds=[{"color": "purple", "value": None}])); pid += 1
 
     y += STAT_H
 
@@ -312,7 +395,52 @@ def _build_dashboard(
 
         y += STAT_H
 
+        # Add per-workload stat panels, wrapping left-to-right
+        if ns in workloads_by_ns and workloads_by_ns[ns]:
+            workload_x = 0
+            workload_y = y
+            for workload in workloads_by_ns[ns]:
+                kind = workload["kind"]
+                name = workload["name"]
+                short_kind = kind[0:3].lower()  # "dep", "sta", "dae"
+                title = f"{name} [{short_kind}]"
+
+                # Construct PromQL for this workload based on kind
+                if kind == "Deployment":
+                    expr = (f'kube_deployment_status_replicas_ready{{namespace="{ns}",deployment="{name}"}}'
+                            f' / kube_deployment_status_replicas{{namespace="{ns}",deployment="{name}"}}')
+                elif kind == "StatefulSet":
+                    expr = (f'kube_statefulset_status_replicas_ready{{namespace="{ns}",statefulset="{name}"}}'
+                            f' / kube_statefulset_status_replicas{{namespace="{ns}",statefulset="{name}"}}')
+                elif kind == "DaemonSet":
+                    expr = (f'kube_daemonset_status_number_ready{{namespace="{ns}",daemonset="{name}"}}'
+                            f' / kube_daemonset_status_desired_number_scheduled{{namespace="{ns}",daemonset="{name}"}}')
+                else:
+                    continue
+
+                panels.append(_stat(pid, title, expr, "percentunit", x=workload_x, y=workload_y,
+                    ds_ref=ds_ref, decimals=0,
+                    thresholds=[
+                        {"color": "red",    "value": None},
+                        {"color": "yellow", "value": 0.5},
+                        {"color": "green",  "value": 1.0},
+                    ])); pid += 1
+
+                workload_x += STAT_W
+                if workload_x + STAT_W > 24:
+                    workload_x = 0
+                    workload_y += STAT_H
+
+            # Move y past the workload stats
+            if workload_x > 0:
+                y = workload_y + STAT_H
+            else:
+                y = workload_y
+
         panels.append(_pod_phase_table(pid, ns, x=0, y=y, ds_ref=ds_ref)); pid += 1
+        y += TABLE_H
+
+        panels.append(_top_pods_by_cpu_table(pid, ns, x=0, y=y, ds_ref=ds_ref)); pid += 1
         y += TABLE_H
 
     return {
@@ -393,24 +521,33 @@ class Aggrokube:
 
     async def _tick(self) -> None:
         async with httpx.AsyncClient() as client:
-            nodes, namespaces = await _discover_cluster(client, self.prom_url)
+            nodes, namespaces, workloads_by_ns = await _discover_cluster(client, self.prom_url)
 
         if not nodes:
             logger.debug("aggrokube: no kube nodes found in Prometheus — skipping")
             return
 
+        # Serialize workloads as sorted list of "ns/kind/name" strings for comparison
+        workloads_list = sorted([
+            f"{ns}/{w['kind']}/{w['name']}"
+            for ns in workloads_by_ns
+            for w in workloads_by_ns[ns]
+        ])
+
         sidecar = _read_sidecar(self.sidecar_path)
-        if sidecar["nodes"] == nodes and sidecar["namespaces"] == namespaces:
+        if (sidecar.get("nodes", []) == nodes and
+            sidecar.get("namespaces", []) == namespaces and
+            sidecar.get("workloads", []) == workloads_list):
             logger.debug("aggrokube: cluster topology unchanged, skipping write")
             return
 
         version   = sidecar.get("version", 0) + 1
-        dashboard = _build_dashboard(nodes, namespaces, version, self._ds_ref)
+        dashboard = _build_dashboard(nodes, namespaces, workloads_by_ns, version, self._ds_ref)
 
         self.dashboard_path.write_text(json.dumps(dashboard, indent=2))
-        _write_sidecar(self.sidecar_path, version, nodes, namespaces)
+        _write_sidecar(self.sidecar_path, version, nodes, namespaces, workloads_list)
 
         logger.info(
             f"aggrokube: wrote dashboard v{version} "
-            f"({len(nodes)} nodes, {len(namespaces)} namespaces: {namespaces})"
+            f"({len(nodes)} nodes, {len(namespaces)} namespaces, {len(workloads_list)} workloads)"
         )

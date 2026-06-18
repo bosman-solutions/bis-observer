@@ -443,4 +443,88 @@ class ContainerQuery(TelemetryBase):
         }
 
 
+class PodQuery(TelemetryBase):
+    """
+    Kubernetes per-pod metrics from cAdvisor (kube-cadvisor-pull job) + Loki.
+
+    namespace: Kubernetes namespace
+    pod:       pod name
+    """
+
+    def __init__(self, namespace: str, pod: str, prom_url: str, loki_url: str):
+        super().__init__(prom_url, loki_url)
+        self.namespace = scrub(namespace)
+        self.pod = scrub(pod)
+        self._sel = f'namespace="{namespace}",pod="{pod}",container!="",container!="POD"'
+
+    async def cpu_usage_pct(self, client: httpx.AsyncClient) -> Optional[float]:
+        """CPU usage as a percentage of one core. Sum over all real containers in the pod,
+        excluding pause container and cgroup roll-up."""
+        v = await self._prom_scalar(
+            client,
+            f'sum(rate(container_cpu_usage_seconds_total{{{self._sel}}}[5m])) * 100',
+        )
+        return round(v, 2) if v is not None else None
+
+    async def memory_used_bytes(self, client: httpx.AsyncClient) -> Optional[float]:
+        """Working set memory used by the pod (sum over real containers)."""
+        return await self._prom_scalar(
+            client,
+            f'sum(container_memory_working_set_bytes{{{self._sel}}})',
+        )
+
+    async def net_io_bps(self, client: httpx.AsyncClient) -> dict:
+        """Pod network rx/tx bytes per second (all interfaces).
+        Network metrics are pod-scoped (no container label), so filter by namespace+pod only."""
+        rx, tx = await asyncio.gather(
+            self._prom_scalar(client, f'sum(rate(container_network_receive_bytes_total{{namespace="{self.namespace}",pod="{self.pod}"}}[5m]))'),
+            self._prom_scalar(client, f'sum(rate(container_network_transmit_bytes_total{{namespace="{self.namespace}",pod="{self.pod}"}}[5m]))'),
+        )
+        return {"rx_bps": rx, "tx_bps": tx}
+
+    async def cpu_range(self, client: httpx.AsyncClient, minutes: int = 15) -> list[list]:
+        """CPU usage % time series for sparklines."""
+        return await self._prom_range(
+            client,
+            f'sum(rate(container_cpu_usage_seconds_total{{{self._sel}}}[2m])) * 100',
+            minutes=minutes,
+        )
+
+    async def restart_count(self, client: httpx.AsyncClient) -> Optional[int]:
+        """Pod restart count (unhappiness signal)."""
+        v = await self._prom_scalar(
+            client,
+            f'sum(kube_pod_container_status_restarts_total{{namespace="{self.namespace}",pod="{self.pod}"}})',
+        )
+        return int(v) if v is not None else None
+
+    async def log_tail(
+        self,
+        client: httpx.AsyncClient,
+        limit: int = 100,
+        level: Optional[str] = None,
+    ) -> list[dict]:
+        """Pod log tail via Loki. Best-effort; returns [] if unavailable."""
+        sel = f'namespace="{self.namespace}",pod=~"{self.pod}.*"'
+        if level:
+            sel += f',level=~"{scrub(level)}"'
+        return await self._loki_tail(client, "{" + sel + "}", limit=limit)
+
+    async def summary(self, client: httpx.AsyncClient) -> dict:
+        cpu, mem, net_io, restarts = await asyncio.gather(
+            self.cpu_usage_pct(client),
+            self.memory_used_bytes(client),
+            self.net_io_bps(client),
+            self.restart_count(client),
+        )
+        return {
+            "namespace": self.namespace,
+            "pod": self.pod,
+            "cpu_pct": cpu,
+            "mem_used_bytes": mem,
+            "net_io": net_io,
+            "restart_count": restarts,
+        }
+
+
 import asyncio  # noqa: E402 — imported here to avoid circular at module level

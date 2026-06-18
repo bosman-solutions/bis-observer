@@ -42,6 +42,7 @@ k3s section for cluster monitoring.
 | Loki         | Log store, push receiver                          | 3100           |
 | Grafana      | Visualization                                     | 3000           |
 | kube-state-metrics | Kubernetes cluster object state (k8s clusters only) | 8080 → NodePort |
+| kubelet cAdvisor   | Per-pod CPU/mem/net (k8s clusters only, via apiserver proxy) | apiserver:6443 |
 
 Alloy replaces both Promtail and prometheus-agent in a single container.
 Promtail reached end-of-life March 2026. kube-state-metrics is pulled by the
@@ -80,7 +81,10 @@ make kube                 # on the cluster: bootstrap kube-state-metrics (idempo
 ```
 
 `make kube` installs kube-state-metrics via Helm, exposes it on a NodePort, and
-reports the `<host-ip>:<nodeport>`. The aggregator's target file points at it:
+reports the `<host-ip>:<nodeport>`. It also bootstraps an `obs-cadvisor-reader`
+ServiceAccount (least-privilege RBAC for `nodes/proxy` + `nodes/metrics`) and a
+long-lived token, writing the token + cluster CA to `aggregator/secrets/` and
+printing the apiserver endpoint. The aggregator's target file points at KSM:
 
 ```yaml
 # aggregator/targets/kube-state-metrics.yml
@@ -88,10 +92,21 @@ reports the `<host-ip>:<nodeport>`. The aggregator's target file points at it:
   labels: { cluster: <cluster-name> }
 ```
 
-The `kube-state-metrics-pull` job scrapes it and theseus `aggrokube` builds the
-cluster dashboard. Target files are provisioned per-aggregator by Ansible; an
-aggregator with no such file scrapes no cluster.
+The `kube-state-metrics-pull` job scrapes it for cluster **object state** and
+theseus `aggrokube` builds the cluster dashboard. Target files are provisioned
+per-aggregator by Ansible; an aggregator with no such file scrapes no cluster.
 See `aggregator/targets/kube-state-metrics.yml.example`.
+
+**Per-pod CPU/memory/network** comes from a separate `kube-cadvisor-pull` job
+that scrapes each node's kubelet cAdvisor through the kube-apiserver proxy. It
+carries credentials (the SA token + cluster CA), so it lives in
+`scrape_configs.d/` — loaded by Prometheus via `scrape_config_files`, NOT inlined
+in the fleet-shared `prometheus.yml`. That isolation is deliberate: a missing
+`ca_file` fails config load, so a credentialed job in the shared file would brick
+every aggregator that doesn't own a cluster. A glob matching zero files is a
+no-op. Drop the job (filled with the apiserver endpoint + one target per node)
+into `scrape_configs.d/` only on the owning aggregator.
+See `aggregator/scrape_configs.d/kube-cadvisor.yml.example`.
 
 ### Grafana
 
@@ -163,6 +178,10 @@ bis-observer/
     ├── .env.example
     ├── targets/
     │   └── kube-state-metrics.yml.example   # KSM pull target shape
+    ├── scrape_configs.d/
+    │   └── kube-cadvisor.yml.example        # credentialed kubelet-cadvisor job shape
+    ├── secrets/
+    │   └── README.md                        # SA token + cluster CA (gitignored)
     └── config/
         ├── prometheus.yml            # includes kube-state-metrics-pull (file_sd, edge-gated)
         ├── loki.yml

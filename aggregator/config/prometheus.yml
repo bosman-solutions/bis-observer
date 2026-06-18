@@ -40,3 +40,15 @@ scrape_configs:
       - files:
           - /etc/prometheus/targets/kube-state-metrics.yml
         refresh_interval: 30s
+
+# Credentialed scrape jobs live in their OWN files, not inline above. This
+# matters: jobs like kube-cadvisor-pull reference a ServiceAccount token + CA
+# (bearer token / tls_config ca_file) that exist only on the aggregator owning
+# the cluster. A missing ca_file fails Prometheus config load — so if such a job
+# were in this shared, fleet-identical file, every cluster-less aggregator would
+# refuse to start. Keeping credentialed jobs in scrape_configs.d/ (Ansible drops
+# them only where the cluster is owned) means a missing secret can never break a
+# LAN aggregator. A glob matching zero files is a no-op.
+# See scrape_configs.d/kube-cadvisor.yml.example.
+scrape_config_files:
+  - /etc/prometheus/scrape_configs.d/*.yml
