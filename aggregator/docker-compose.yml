@@ -109,10 +109,14 @@ services:
       - GRAFANA_TOKEN=${GRAFANA_TOKEN:-}
       - AGGROBOARD_INTERVAL=${AGGROBOARD_INTERVAL:-60}
       - DASHBOARD_PATH=/dashboards/aggroboard.json
+      - K8S_API_URL=${K8S_API_URL:-}
+      - K8S_TOKEN_FILE=/etc/theseus/secrets/kube-token
+      - K8S_CA_FILE=/etc/theseus/secrets/kube-ca.crt
     ports:
       - "${THESEUS_PORT:-8182}:8182"
     volumes:
       - ./config/grafana/provisioning/dashboards:/dashboards
+      - ./secrets:/etc/theseus/secrets:ro
     depends_on:
       - prometheus
       - loki

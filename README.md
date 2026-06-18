@@ -108,6 +108,13 @@ no-op. Drop the job (filled with the apiserver endpoint + one target per node)
 into `scrape_configs.d/` only on the owning aggregator.
 See `aggregator/scrape_configs.d/kube-cadvisor.yml.example`.
 
+**Pod logs** are pulled live on demand from the kube-apiserver (reusing the same
+`obs-cadvisor-reader` ServiceAccount, now with `pods/log` RBAC). There is no log
+shipper or DaemonSet — this is deliberate, as armv7 worker nodes cannot run Alloy.
+Pod logs are available via `GET /api/pod/<namespace>/<pod>/logs` on theseus and
+offer only a live tail; no historical aggregation. Enable by setting `K8S_API_URL`
+on the aggregator's `.env` (same apiserver endpoint printed by `make kube`).
+
 ### Grafana
 
 Navigate to `http://<aggregator-ip>:3000`.

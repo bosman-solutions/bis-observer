@@ -156,6 +156,9 @@ kube:
 		'- apiGroups: [""]' \
 		'  resources: ["nodes/proxy", "nodes/metrics", "nodes/stats"]' \
 		'  verbs: ["get", "list"]' \
+		'- apiGroups: [""]' \
+		'  resources: ["pods", "pods/log"]' \
+		'  verbs: ["get", "list"]' \
 		'---' \
 		'apiVersion: rbac.authorization.k8s.io/v1' \
 		'kind: ClusterRoleBinding' \
@@ -206,6 +209,9 @@ kube:
 	fi
 	@echo "    one target entry per node (kubectl get nodes), label cluster=<name>"
 	@echo "  Shape: aggregator/scrape_configs.d/kube-cadvisor.yml.example"
+	@echo ""
+	@echo "  Pod-log tailing: set K8S_API_URL in aggregator/.env to enable on-demand"
+	@echo "  pod logs via theseus (/api/pod/<ns>/<pod>/logs). Same apiserver endpoint."
 	@echo "  ───────────────────────────────────────────────────────────────"
 
 restart-collector:

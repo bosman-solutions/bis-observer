@@ -12,6 +12,7 @@ get present state.
 """
 
 import logging
+import os
 import re
 import time
 from typing import Optional
@@ -19,6 +20,12 @@ from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Kubernetes API configuration for on-demand pod log tailing.
+# If K8S_API_URL is unset, pod log tailing is disabled.
+K8S_API_URL    = os.getenv("K8S_API_URL", "")
+K8S_TOKEN_FILE = os.getenv("K8S_TOKEN_FILE", "/etc/theseus/secrets/kube-token")
+K8S_CA_FILE    = os.getenv("K8S_CA_FILE", "/etc/theseus/secrets/kube-ca.crt")
 
 # Identifiers are interpolated into PromQL/LogQL label matchers. Strip anything
 # that could break out of a quoted matcher ('"', '}', '`', backslash, ...).
@@ -504,11 +511,100 @@ class PodQuery(TelemetryBase):
         limit: int = 100,
         level: Optional[str] = None,
     ) -> list[dict]:
-        """Pod log tail via Loki. Best-effort; returns [] if unavailable."""
-        sel = f'namespace="{self.namespace}",pod=~"{self.pod}.*"'
-        if level:
-            sel += f',level=~"{scrub(level)}"'
-        return await self._loki_tail(client, "{" + sel + "}", limit=limit)
+        """Pod log tail pulled live from kube-apiserver on demand (no historical aggregation).
+        Reuses the obs-cadvisor-reader ServiceAccount token. Best-effort; returns [] if K8S_API_URL
+        is unset or apiserver is unreachable. No level filtering on the apiserver side; filtered
+        client-side after parsing."""
+        if not K8S_API_URL:
+            return []
+
+        # Read the bearer token from the mounted secret.
+        try:
+            with open(K8S_TOKEN_FILE, "r") as f:
+                token = f.read().strip()
+        except (FileNotFoundError, IOError):
+            logger.warning(f"K8S token file not found: {K8S_TOKEN_FILE}")
+            return []
+
+        # Determine CA verification: use K8S_CA_FILE if it exists, else insecure (trusted LAN).
+        verify = K8S_CA_FILE if os.path.isfile(K8S_CA_FILE) else False
+
+        # Build the apiserver endpoint for this pod's logs.
+        url = f"{K8S_API_URL}/api/v1/namespaces/{self.namespace}/pods/{self.pod}/log"
+        params = {
+            "tailLines": min(int(limit), 500),
+            "timestamps": "true",  # RFC3339 timestamps in each line
+        }
+        headers = {"Authorization": f"Bearer {token}"}
+
+        try:
+            async with httpx.AsyncClient(verify=verify, timeout=10.0) as k8s_client:
+                resp = await k8s_client.get(url, params=params, headers=headers)
+                if resp.status_code != 200:
+                    # Multi-container pods return 400 when no container is specified — expected.
+                    # Just return empty.
+                    if resp.status_code != 400:
+                        logger.warning(f"apiserver log fetch failed ({self.namespace}/{self.pod}): {resp.status_code}")
+                    return []
+
+                # Parse the plain-text response: each line is "RFC3339_TIMESTAMP message".
+                lines = []
+                for line in resp.text.split("\n"):
+                    if not line.strip():
+                        continue
+
+                    # Split on the first space to separate timestamp from message.
+                    parts = line.split(" ", 1)
+                    if len(parts) != 2:
+                        continue
+
+                    ts_str, message = parts
+
+                    # Parse RFC3339 timestamp. Normalize nanoseconds to microseconds for fromisoformat.
+                    try:
+                        # Remove trailing 'Z' and handle nanosecond precision.
+                        ts_clean = ts_str.rstrip("Z")
+                        # fromisoformat only handles up to microsecond precision; trim nanoseconds.
+                        if "." in ts_clean:
+                            base, frac = ts_clean.rsplit(".", 1)
+                            # Truncate fractional seconds to 6 digits (microseconds).
+                            frac = frac[:6].ljust(6, "0")
+                            ts_clean = f"{base}.{frac}"
+                        ts = time.mktime(
+                            __import__("datetime").datetime.fromisoformat(ts_clean).timetuple()
+                        ) + (
+                            __import__("datetime").datetime.fromisoformat(ts_clean).microsecond / 1e6
+                        )
+                    except (ValueError, AttributeError):
+                        ts = time.time()
+
+                    # Infer log level from message text (case-insensitive).
+                    msg_lower = message.lower()
+                    if any(x in msg_lower for x in ["error", "err ", "fatal", "panic"]):
+                        inferred_level = "error"
+                    elif "warn" in msg_lower:
+                        inferred_level = "warn"
+                    else:
+                        inferred_level = "info"
+
+                    lines.append({
+                        "ts": ts,
+                        "level": inferred_level,
+                        "line": message,
+                    })
+
+                # Filter by level if requested.
+                if level:
+                    level_tokens = set(level.split("|"))
+                    lines = [l for l in lines if l["level"] in level_tokens]
+
+                # Return newest first, capped at limit.
+                lines.sort(key=lambda x: x["ts"], reverse=True)
+                return lines[:limit]
+
+        except Exception as e:
+            logger.warning(f"apiserver log fetch failed ({self.namespace}/{self.pod}): {e}")
+            return []
 
     async def summary(self, client: httpx.AsyncClient) -> dict:
         cpu, mem, net_io, restarts = await asyncio.gather(

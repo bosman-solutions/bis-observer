@@ -28,6 +28,11 @@ dates are ISO-8601.
 - theseus `PodQuery` + routes `GET /api/pod/<ns>/<pod>` (+ `/range`, `/logs`) —
   per-pod cpu%, working-set memory, net IO, and restart count, sourced from the new
   cAdvisor series. Consumed by bis-cadastre's pod scope panel.
+- **Pod log tailing** via `PodQuery.log_tail()` — pulls live logs from the
+  kube-apiserver on demand (reusing the `obs-cadvisor-reader` ServiceAccount,
+  now with `pods/log` RBAC). No log shipper or DaemonSet needed; live tail only
+  (no historical aggregation). Deliberate design for armv7 worker support.
+  Enable by setting `K8S_API_URL` on the aggregator.
 - aggrokube cluster CPU/mem overview stats and per-namespace "top pods by CPU"
   panels, now that per-pod usage exists.
 - `targets/kube-state-metrics.yml.example` — KSM pull-target shape.
