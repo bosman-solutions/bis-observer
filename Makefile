@@ -182,6 +182,13 @@ kube:
 	@mkdir -p $(AGGREGATOR_DIR)/secrets
 	@kubectl get secret obs-cadvisor-reader-token -n monitoring -o jsonpath='{.data.token}'  | base64 -d > $(AGGREGATOR_DIR)/secrets/kube-token
 	@kubectl get secret obs-cadvisor-reader-token -n monitoring -o jsonpath='{.data.ca\.crt}' | base64 -d > $(AGGREGATOR_DIR)/secrets/kube-ca.crt
+	@# Perms matter here: the dir must stay traversable (755) and the files
+	@# readable (644) by the prometheus container's non-root uid. Do NOT 600 the
+	@# directory — that strips the x bit and breaks both git checkout and the
+	@# container's bind-mount reads. The host is the trust boundary; the token is
+	@# least-privilege (read-only nodes/proxy + metrics).
+	@chmod 755 $(AGGREGATOR_DIR)/secrets
+	@chmod 644 $(AGGREGATOR_DIR)/secrets/kube-token $(AGGREGATOR_DIR)/secrets/kube-ca.crt
 	$(eval APISERVER_IP := $(shell kubectl get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null))
 	@echo "✓ cAdvisor reader ready."
 	@echo ""
