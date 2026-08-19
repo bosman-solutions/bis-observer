@@ -46,12 +46,24 @@ services:
       - ./gpu/dcgm-counters.csv:/etc/dcgm-exporter/bis-counters.csv:ro
 
   # --------------------------------------------------------------------------
-  # ALLOY — additive only. Mounts the GPU scrape block and waits for the
-  # exporter. Everything else is inherited from the base compose file.
+  # ALLOY — additive only: env + ordering. NO extra volume.
+  #
+  # The obvious move — bind-mounting gpu/config.gpu.alloy to
+  # /etc/alloy/config.gpu.alloy — CANNOT WORK, and fails at container init:
+  #
+  #   error mounting ".../gpu/config.gpu.alloy" to rootfs at
+  #   "/etc/alloy/config.gpu.alloy": create mountpoint: read-only file system
+  #
+  # /etc/alloy is already a read-only bind of collector/alloy/. runc has to
+  # create the target file before it can mount onto it, and it cannot create
+  # anything inside a read-only mount. Adding the directory doesn't help — the
+  # blocker is the read-only parent, not a missing path.
+  #
+  # So the GPU scrape config is COPIED into collector/alloy/ by `make collector`
+  # on GPU nodes and gitignored there, the same way aggregator/targets/*.yml are
+  # generated beside their source. Deploy is a reset, so the copy is idempotent.
   # --------------------------------------------------------------------------
   alloy:
-    volumes:
-      - ./gpu/config.gpu.alloy:/etc/alloy/config.gpu.alloy:ro
     environment:
       - DCGM_EXPORTER_PORT=${DCGM_EXPORTER_PORT:-9400}
     depends_on:

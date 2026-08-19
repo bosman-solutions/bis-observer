@@ -1,41 +1,64 @@
 # dcgm-counters.csv — bis-observer GPU profile
-# Replaces dcgm-exporter's default counter set. The default is deliberately
-# conservative and ships the naive view (DCGM_FI_DEV_GPU_UTIL). We keep that
-# field ON PURPOSE so the dashboard can show it lying next to SM_ACTIVE.
+# Replaces dcgm-exporter's default counter set.
+#
+# EVERY FIELD BELOW WAS VERIFIED EMITTING ON AN RTX 3080 (driver 595.71.05,
+# dcgm-exporter 3.3.9-3.6.1) on 2026-08-19. Fields that DCGM accepts but the
+# card never populates are worse than useless on a dashboard — an empty panel
+# reads as "healthy" to everyone who didn't build it.
+#
+# NOT AVAILABLE HERE — the DCGM_FI_PROF_* family (SM_ACTIVE, SM_OCCUPANCY,
+# DRAM_ACTIVE, PIPE_TENSOR_ACTIVE). Those are Data Center Profiling (DCP)
+# fields. On GeForce the profiling module never loads:
+#   "Not collecting DCP metrics: This request is serviced by a module of DCGM
+#    that is not currently loaded"
+# It is a product-segmentation boundary, not a permission or config problem —
+# SYS_ADMIN and the nvidia runtime are both present and it still declines.
+# See README.md for what replaces them and what claims that costs us.
 #
 # format: DCGM FIELD, Prometheus metric type, help string
 
-# --- The naive metric, kept as the control -----------------------------------
-# "Percent of time one or more kernels was resident." NOT a busy-ness measure.
-DCGM_FI_DEV_GPU_UTIL,               gauge, GPU utilization percent (naive - kernel residency not work)
-
-# --- Device truth: what the chip is actually doing ---------------------------
-# Requires DCGM profiling (DCP). VERIFY on GeForce - see README risk note.
-DCGM_FI_PROF_SM_ACTIVE,             gauge, Fraction of time at least one warp was active on an SM
-DCGM_FI_PROF_SM_OCCUPANCY,          gauge, Fraction of resident warps vs max supported
-DCGM_FI_PROF_PIPE_TENSOR_ACTIVE,    gauge, Fraction of time the tensor pipes were active
-DCGM_FI_PROF_PIPE_FP16_ACTIVE,      gauge, Fraction of time the fp16 pipe was active
-DCGM_FI_PROF_DRAM_ACTIVE,           gauge, Fraction of time device memory was being read or written
-DCGM_FI_PROF_PCIE_TX_BYTES,         gauge, PCIe bytes transmitted
-DCGM_FI_PROF_PCIE_RX_BYTES,         gauge, PCIe bytes received
+# --- Occupancy vs work -------------------------------------------------------
+# GPU_UTIL is kept deliberately as the CONTROL series. It reports only that a
+# kernel was resident, not that the chip did work.
+DCGM_FI_DEV_GPU_UTIL,                 gauge, GPU utilization percent (kernel residency - NOT work)
+# The stand-in for DRAM_ACTIVE: percent of time the memory controller was busy.
+# Coarser than the profiling field, but it still separates a memory-bound decode
+# loop from a compute-bound prefill, which is the distinction that matters.
+DCGM_FI_DEV_MEM_COPY_UTIL,            gauge, Memory controller utilization percent (bandwidth proxy)
+DCGM_FI_DEV_ENC_UTIL,                 gauge, Video encoder utilization percent
+DCGM_FI_DEV_DEC_UTIL,                 gauge, Video decoder utilization percent
 
 # --- Memory: the allocation currency ----------------------------------------
-DCGM_FI_DEV_FB_FREE,                gauge, Framebuffer memory free (MiB)
-DCGM_FI_DEV_FB_USED,                gauge, Framebuffer memory used (MiB)
-DCGM_FI_DEV_FB_TOTAL,               gauge, Framebuffer memory total (MiB)
+# The parcel map. VRAM decides who gets to load, and it is the one signal that
+# reads correctly when a model is resident but idle (util 0, FB_USED 8GB).
+DCGM_FI_DEV_FB_FREE,                  gauge, Framebuffer memory free (MiB)
+DCGM_FI_DEV_FB_USED,                  gauge, Framebuffer memory used (MiB)
+DCGM_FI_DEV_FB_TOTAL,                 gauge, Framebuffer memory total (MiB)
 
-# --- Power / thermal / clocks: the throttle story ----------------------------
-DCGM_FI_DEV_POWER_USAGE,            gauge, Power draw (W)
-DCGM_FI_DEV_ENFORCED_POWER_LIMIT,   gauge, Enforced power limit (W)
-DCGM_FI_DEV_GPU_TEMP,               gauge, GPU core temperature (C)
-DCGM_FI_DEV_MEMORY_TEMP,            gauge, Memory temperature (C)
-DCGM_FI_DEV_SM_CLOCK,               gauge, SM clock (MHz)
-DCGM_FI_DEV_MEM_CLOCK,              gauge, Memory clock (MHz)
-# The invisible noisy neighbour. Bitmask - nonzero means someone is being capped.
-DCGM_FI_DEV_CLOCK_THROTTLE_REASONS, gauge, Current clock throttle reason bitmask
+# --- Throttle: duration counters, not just a live flag -----------------------
+# These turned out BETTER than the bitmask for this job. They are cumulative
+# microseconds spent capped, so rate() over them yields the FRACTION of wall
+# time a tenant was being throttled — a duration you can put an SLO on, rather
+# than a boolean you have to catch in the act.
+DCGM_FI_DEV_POWER_VIOLATION,          counter, Microseconds spent capped by the power limit
+DCGM_FI_DEV_THERMAL_VIOLATION,        counter, Microseconds spent capped by thermals
+DCGM_FI_DEV_CLOCK_THROTTLE_REASONS,   gauge, Current clock throttle reason bitmask (live flag)
 
-# --- Health tail: the class classic SRE has never seen -----------------------
-DCGM_FI_DEV_XID_ERRORS,             gauge, Last XID error code raised by the driver
-DCGM_FI_DEV_ECC_SBE_VOL_TOTAL,      counter, Volatile single-bit ECC errors
-DCGM_FI_DEV_ECC_DBE_VOL_TOTAL,      counter, Volatile double-bit ECC errors
-DCGM_FI_DEV_RETIRED_PENDING,        counter, Pages pending retirement
+# --- Clocks / power / thermal: cause and effect ------------------------------
+DCGM_FI_DEV_SM_CLOCK,                 gauge, SM clock (MHz)
+DCGM_FI_DEV_MEM_CLOCK,                gauge, Memory clock (MHz)
+DCGM_FI_DEV_POWER_USAGE,              gauge, Power draw (W)
+DCGM_FI_DEV_ENFORCED_POWER_LIMIT,     gauge, Enforced power limit (W)
+DCGM_FI_DEV_GPU_TEMP,                 gauge, GPU core temperature (C)
+DCGM_FI_DEV_MEMORY_TEMP,              gauge, Memory temperature (C)
+# Millijoules, monotonic. Divided by tokens served it gives energy per token —
+# the unit that turns a GPU dashboard into a cost argument.
+DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION, counter, Total energy consumed since boot (mJ)
+
+# --- Health tail -------------------------------------------------------------
+DCGM_FI_DEV_XID_ERRORS,               gauge, Last XID error code raised by the driver
+DCGM_FI_DEV_PCIE_REPLAY_COUNTER,      counter, PCIe replay count (link health)
+# GeForce has no ECC. These emit nothing on a 3080 and are kept only so the
+# same file works unchanged on a datacenter card.
+DCGM_FI_DEV_ECC_SBE_VOL_TOTAL,        counter, Volatile single-bit ECC errors (datacenter cards only)
+DCGM_FI_DEV_ECC_DBE_VOL_TOTAL,        counter, Volatile double-bit ECC errors (datacenter cards only)

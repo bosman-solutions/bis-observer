@@ -67,6 +67,9 @@ collector: _set_node_name
 		if [ -e /dev/nvidiactl ] && [ -f $(COLLECTOR_DIR)/gpu/docker-compose.dcgm.yml ]; then \
 			echo "  NVIDIA device present — including GPU overlay (dcgm-exporter)..."; \
 			GPU_ARGS="-f $(COLLECTOR_DIR)/gpu/docker-compose.dcgm.yml"; \
+			cp $(COLLECTOR_DIR)/gpu/config.gpu.alloy $(COLLECTOR_DIR)/alloy/config.gpu.alloy; \
+		else \
+			rm -f $(COLLECTOR_DIR)/alloy/config.gpu.alloy; \
 		fi; \
 		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml $$GPU_ARGS --env-file $(COLLECTOR_DIR)/.env up -d; \
 		echo "  restarting alloy to load config changes (bind mounts don't trigger recreate)..."; \

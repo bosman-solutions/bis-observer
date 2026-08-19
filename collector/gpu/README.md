@@ -39,26 +39,69 @@ curl -s localhost:9400/metrics | grep -c DCGM_FI_PROF_
 # 3. alloy picked up the new job
 curl -s localhost:12345/api/v0/web/components | grep -o dcgm_exporter
 
-# 4. it reached the aggregator (run against cerberus)
-curl -s 'http://cerberus:9090/api/v1/query?query=DCGM_FI_DEV_FB_USED'
+# 4. it reached the aggregator this node ships to (AGGREGATOR_HOST in .env —
+#    melchior for the home stack, cerberus for the edge stack)
+curl -s 'http://melchior:9090/api/v1/query?query=DCGM_FI_DEV_FB_USED'
 ```
 
-## RISK — profiling fields on GeForce
+## SETTLED — profiling fields are NOT available on GeForce
 
-**Step 2 above is the one that can sink this.** DCGM's profiling metrics
-(`DCGM_FI_PROF_*` — SM_ACTIVE, DRAM_ACTIVE, tensor pipe activity) are a
-datacenter-GPU feature. Support on consumer GeForce silicon is inconsistent and
-version-dependent; the fields may return `N/A`, or be absent from the scrape
-entirely, even when dcgm-exporter itself comes up clean.
+Tested on the 3080, 2026-08-19. `grep -c DCGM_FI_PROF_` returns **0**, and the
+exporter says why:
 
-If `grep -c DCGM_FI_PROF_` returns 0 on the 3080, the fallback is a small NVML
-sampling exporter (`nvidia-smi dmon`-equivalent) that derives an SM-activity
-proxy from high-frequency sampling. Coarser than DCP, but it still beats
-`utilization.gpu` and it still demonstrates the point. Decide that after the
-first `up` — do not design around it in advance.
+```
+Not collecting DCP metrics: This request is serviced by a module of DCGM
+that is not currently loaded
+Skipping line 1 ('DCGM_FI_PROF_SM_ACTIVE'): metric not enabled
+```
 
-Also unverified: the pinned image tag. If `nvcr.io` pull fails, set
-`DCGM_EXPORTER_IMAGE` in `.env` to a tag that exists.
+Data Center Profiling is a product-segmentation boundary, not a permission or
+configuration problem — `SYS_ADMIN`, the nvidia runtime and a clean DCGM init
+are all present and it still declines. There is nothing to fix. SM_ACTIVE,
+SM_OCCUPANCY, DRAM_ACTIVE and the tensor-pipe fields are unavailable on this
+class of card and the counter file no longer asks for them.
+
+### What replaces them
+
+| lost | replacement | what it costs us |
+|---|---|---|
+| `PROF_SM_ACTIVE` | `SM_CLOCK` + violation counters | no direct measure of warp occupancy; throttling is inferred from clocks falling under load rather than observed at the SM |
+| `PROF_DRAM_ACTIVE` | `MEM_COPY_UTIL` | percent of time the controller was busy, not the fraction of peak bandwidth — separates memory-bound from compute-bound, but won't quantify headroom |
+| `PROF_PIPE_TENSOR_ACTIVE` | *(nothing)* | cannot tell whether tensor cores are engaged, so no fp16-vs-ternary kernel comparison on this hardware |
+
+The claim that survives is "occupancy is not work, and here are three
+independent signals that prove it." The claim that does not survive is any
+statement about *what fraction of the silicon* was doing the work.
+
+`DCGM_FI_DEV_POWER_VIOLATION` / `THERMAL_VIOLATION` turned out to be a better
+throttle signal than the bitmask anyway: they are cumulative microseconds spent
+capped, so `rate()` gives the fraction of wall time a tenant was throttled — a
+duration you can hold an SLO against instead of a flag you have to catch live.
+
+### Verified emitting on the 3080
+
+`GPU_UTIL`, `MEM_COPY_UTIL`, `ENC_UTIL`, `DEC_UTIL`, `FB_FREE/USED/TOTAL`,
+`SM_CLOCK`, `MEM_CLOCK`, `POWER_USAGE`, `ENFORCED_POWER_LIMIT`, `GPU_TEMP`,
+`MEMORY_TEMP`, `TOTAL_ENERGY_CONSUMPTION`, `POWER_VIOLATION`,
+`THERMAL_VIOLATION`, `CLOCK_THROTTLE_REASONS`, `XID_ERRORS`,
+`PCIE_REPLAY_COUNTER`.
+
+Accepted but never populated here: the ECC fields (GeForce has no ECC) and
+`PCIE_TX/RX_THROUGHPUT`. Empty panels read as "healthy" to everyone who didn't
+build the board, so nothing that stays empty belongs on it.
+
+Image tag `3.3.9-3.6.1-ubuntu22.04` is confirmed pulling. If it ever stops, set
+`DCGM_EXPORTER_IMAGE` in `.env`.
+
+## Known trap — do NOT nest the Alloy config mount
+
+Bind-mounting `gpu/config.gpu.alloy` onto `/etc/alloy/config.gpu.alloy` fails at
+container init: `/etc/alloy` is already a read-only bind of `collector/alloy/`,
+and runc must create the target file before mounting onto it, which it cannot do
+inside a read-only mount. Creating the directory does not help — the read-only
+parent is the blocker. `make collector` therefore *copies* the file into
+`collector/alloy/` on GPU nodes, where it is gitignored. Deploy is a reset, so
+the copy is idempotent and a node that loses its GPU has it removed.
 
 ## Scope
 
