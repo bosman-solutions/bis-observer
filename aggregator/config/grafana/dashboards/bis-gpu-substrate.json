@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 9,
+  "version": 10,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -80,7 +80,7 @@
   "panels": [
     {
       "type": "stat",
-      "title": "Energy \u2014 today",
+      "title": "Today",
       "description": "Since midnight. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
@@ -89,14 +89,14 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 4,
-        "h": 4
+        "w": 5,
+        "h": 5
       },
+      "timeFrom": "now/d",
+      "hideTimeOverride": true,
       "fieldConfig": {
         "defaults": {
-          "unit": "kwatth",
           "decimals": 2,
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -107,7 +107,40 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "kwatth"
+              },
+              {
+                "id": "displayName",
+                "value": "Energy"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "displayName",
+                "value": "Cost"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -118,99 +151,51 @@
           "values": false
         },
         "graphMode": "none",
-        "colorMode": "value",
-        "textMode": "auto"
+        "colorMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "vertical",
+        "justifyMode": "auto"
       },
       "targets": [
         {
           "expr": "increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9",
-          "legendFormat": "",
+          "legendFormat": "Energy",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           }
-        }
-      ],
-      "timeFrom": "now/d",
-      "hideTimeOverride": true
-    },
-    {
-      "type": "stat",
-      "title": "Cost \u2014 today",
-      "description": "Energy today x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 4,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          }
         },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "graphMode": "none",
-        "colorMode": "value",
-        "textMode": "auto"
-      },
-      "targets": [
         {
           "expr": "(increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9) * $rate",
-          "legendFormat": "",
-          "refId": "A",
+          "legendFormat": "Cost",
+          "refId": "B",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           }
         }
-      ],
-      "timeFrom": "now/d",
-      "hideTimeOverride": true
+      ]
     },
     {
       "type": "stat",
-      "title": "Energy \u2014 yesterday",
-      "description": "Full previous day. Card draw only; excludes PSU losses and the rest of the machine.",
+      "title": "Yesterday",
+      "description": "Previous day. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 8,
+        "x": 5,
         "y": 0,
-        "w": 4,
-        "h": 4
+        "w": 5,
+        "h": 5
       },
+      "timeFrom": "now/d",
+      "hideTimeOverride": true,
       "fieldConfig": {
         "defaults": {
-          "unit": "kwatth",
           "decimals": 2,
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -221,7 +206,40 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "kwatth"
+              },
+              {
+                "id": "displayName",
+                "value": "Energy"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "displayName",
+                "value": "Cost"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -232,101 +250,52 @@
           "values": false
         },
         "graphMode": "none",
-        "colorMode": "value",
-        "textMode": "auto"
+        "colorMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "vertical",
+        "justifyMode": "auto"
       },
       "targets": [
         {
           "expr": "increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9",
-          "legendFormat": "",
+          "legendFormat": "Energy",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           }
-        }
-      ],
-      "timeFrom": "now/d",
-      "hideTimeOverride": true,
-      "timeShift": "1d/d"
-    },
-    {
-      "type": "stat",
-      "title": "Cost \u2014 yesterday",
-      "description": "Energy yesterday x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          }
         },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "graphMode": "none",
-        "colorMode": "value",
-        "textMode": "auto"
-      },
-      "targets": [
         {
           "expr": "(increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9) * $rate",
-          "legendFormat": "",
-          "refId": "A",
+          "legendFormat": "Cost",
+          "refId": "B",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           }
         }
       ],
-      "timeFrom": "now/d",
-      "hideTimeOverride": true,
       "timeShift": "1d/d"
     },
     {
       "type": "stat",
-      "title": "Energy \u2014 this month",
+      "title": "This month",
       "description": "Since the 1st. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 16,
+        "x": 10,
         "y": 0,
-        "w": 4,
-        "h": 4
+        "w": 5,
+        "h": 5
       },
+      "timeFrom": "now/M",
+      "hideTimeOverride": true,
       "fieldConfig": {
         "defaults": {
-          "unit": "kwatth",
           "decimals": 2,
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -337,7 +306,40 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "kwatth"
+              },
+              {
+                "id": "displayName",
+                "value": "Energy"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "displayName",
+                "value": "Cost"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -348,79 +350,91 @@
           "values": false
         },
         "graphMode": "none",
-        "colorMode": "value",
-        "textMode": "auto"
+        "colorMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "vertical",
+        "justifyMode": "auto"
       },
       "targets": [
         {
           "expr": "increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9",
-          "legendFormat": "",
+          "legendFormat": "Energy",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           }
+        },
+        {
+          "expr": "(increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9) * $rate",
+          "legendFormat": "Cost",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
         }
-      ],
-      "timeFrom": "now/M",
-      "hideTimeOverride": true
+      ]
     },
     {
-      "type": "stat",
-      "title": "Cost \u2014 this month",
-      "description": "Energy this month x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
+      "type": "timeseries",
+      "title": "Power",
+      "description": "draw = current board power.  limit = enforced power cap.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 20,
+        "x": 15,
         "y": 0,
-        "w": 4,
-        "h": 4
+        "w": 9,
+        "h": 5
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
+          "unit": "watt",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never",
+            "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
         },
-        "graphMode": "none",
-        "colorMode": "value",
-        "textMode": "auto"
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "expr": "(increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9) * $rate",
-          "legendFormat": "",
+          "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
+          "legendFormat": "draw",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           }
+        },
+        {
+          "expr": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT{node=\"$node\", gpu=~\"$gpu\"}",
+          "legendFormat": "limit",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
         }
-      ],
-      "timeFrom": "now/M",
-      "hideTimeOverride": true
+      ]
     },
     {
       "type": "stat",
@@ -432,7 +446,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 5,
         "w": 4,
         "h": 4
       },
@@ -487,7 +501,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 4,
+        "y": 5,
         "w": 4,
         "h": 4
       },
@@ -542,7 +556,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 4,
+        "y": 5,
         "w": 4,
         "h": 4
       },
@@ -605,7 +619,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 4,
+        "y": 5,
         "w": 4,
         "h": 4
       },
@@ -668,7 +682,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 4,
+        "y": 5,
         "w": 4,
         "h": 4
       },
@@ -723,7 +737,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 4,
+        "y": 5,
         "w": 4,
         "h": 4
       },
@@ -786,7 +800,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 9,
         "w": 24,
         "h": 8
       },
@@ -856,7 +870,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 17,
         "w": 12,
         "h": 7
       },
@@ -916,7 +930,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 16,
+        "y": 17,
         "w": 12,
         "h": 7
       },
@@ -968,126 +982,6 @@
     },
     {
       "type": "timeseries",
-      "title": "Power vs limit",
-      "description": "draw = current board power.  limit = enforced power cap.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 23,
-        "w": 8,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "watt",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 6,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "draw",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
-        },
-        {
-          "expr": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "limit",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Energy",
-      "description": "avg = watts derived from the total-energy counter over 5m.  instant = point-in-time reading.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 8,
-        "y": 23,
-        "w": 8,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "watt",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 6,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "rate(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[5m]) / 1000",
-          "legendFormat": "avg",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
-        },
-        {
-          "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "instant",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
       "title": "Thermals",
       "description": "core = GPU die temperature. GeForce exposes no memory-junction sensor.",
       "datasource": {
@@ -1095,10 +989,10 @@
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 16,
-        "y": 23,
+        "x": 0,
+        "y": 24,
         "w": 8,
-        "h": 6
+        "h": 5
       },
       "fieldConfig": {
         "defaults": {
@@ -1146,8 +1040,8 @@
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 0,
-        "y": 29,
+        "x": 8,
+        "y": 24,
         "w": 8,
         "h": 5
       },
@@ -1247,8 +1141,8 @@
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 8,
-        "y": 29,
+        "x": 16,
+        "y": 24,
         "w": 8,
         "h": 5
       },
@@ -1299,57 +1193,6 @@
         {
           "expr": "DCGM_FI_DEV_XID_ERRORS{node=\"$node\", gpu=~\"$gpu\"}",
           "legendFormat": "",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "PCIe replays",
-      "description": "PCIe link-layer retransmits in the last 10 minutes.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 16,
-        "y": 29,
-        "w": 8,
-        "h": 5
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 6,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "expr": "increase(DCGM_FI_DEV_PCIE_REPLAY_COUNTER{node=\"$node\", gpu=~\"$gpu\"}[10m])",
-          "legendFormat": "10m",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
