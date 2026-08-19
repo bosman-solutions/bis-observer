@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 7,
+  "version": 8,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -77,6 +77,115 @@
   "panels": [
     {
       "type": "stat",
+      "title": "Card",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 3
+      },
+      "description": "Model as reported by the driver, with bus address and UUID.",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "none",
+        "textMode": "name",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_FB_TOTAL{node=\"$node\", gpu=~\"$gpu\"}",
+          "legendFormat": "{{modelName}}   \u00b7   gpu {{gpu}}   \u00b7   {{pci_bus_id}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "VRAM total",
+      "description": "Framebuffer capacity of the selected card.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_FB_TOTAL{node=\"$node\", gpu=~\"$gpu\"}",
+          "legendFormat": "",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
       "title": "Energy today",
       "description": "Since midnight. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
@@ -85,7 +194,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 3,
         "w": 4,
         "h": 4
       },
@@ -141,7 +250,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 0,
+        "y": 3,
         "w": 4,
         "h": 4
       },
@@ -197,7 +306,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 0,
+        "y": 3,
         "w": 4,
         "h": 4
       },
@@ -254,7 +363,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 0,
+        "y": 3,
         "w": 4,
         "h": 4
       },
@@ -311,7 +420,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 0,
+        "y": 3,
         "w": 4,
         "h": 4
       },
@@ -367,7 +476,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 0,
+        "y": 3,
         "w": 4,
         "h": 4
       },
@@ -423,7 +532,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 7,
         "w": 4,
         "h": 4
       },
@@ -478,7 +587,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 4,
+        "y": 7,
         "w": 4,
         "h": 4
       },
@@ -533,7 +642,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 4,
+        "y": 7,
         "w": 4,
         "h": 4
       },
@@ -596,7 +705,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 4,
+        "y": 7,
         "w": 4,
         "h": 4
       },
@@ -659,7 +768,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 4,
+        "y": 7,
         "w": 4,
         "h": 4
       },
@@ -714,7 +823,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 4,
+        "y": 7,
         "w": 4,
         "h": 4
       },
@@ -777,7 +886,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 11,
         "w": 24,
         "h": 8
       },
@@ -847,7 +956,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 19,
         "w": 12,
         "h": 7
       },
@@ -907,7 +1016,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 16,
+        "y": 19,
         "w": 12,
         "h": 7
       },
@@ -967,7 +1076,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 26,
         "w": 8,
         "h": 6
       },
@@ -1027,7 +1136,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 23,
+        "y": 26,
         "w": 8,
         "h": 6
       },
@@ -1087,7 +1196,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 23,
+        "y": 26,
         "w": 8,
         "h": 6
       },
@@ -1138,7 +1247,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 29,
+        "y": 32,
         "w": 8,
         "h": 5
       },
@@ -1239,7 +1348,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 29,
+        "y": 32,
         "w": 8,
         "h": 5
       },
@@ -1308,7 +1417,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 29,
+        "y": 32,
         "w": 8,
         "h": 5
       },
