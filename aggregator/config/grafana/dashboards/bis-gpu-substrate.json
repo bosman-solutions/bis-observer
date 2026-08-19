@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 4,
+  "version": 5,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -67,7 +67,7 @@
     {
       "type": "stat",
       "title": "Util",
-      "description": "Kernel residency, not work done.",
+      "description": "% of time at least one kernel was resident on the GPU.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -122,7 +122,7 @@
     {
       "type": "stat",
       "title": "Mem BW",
-      "description": "Memory controller busy. Bandwidth proxy.",
+      "description": "% of time the memory controller was reading or writing.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -176,8 +176,8 @@
     },
     {
       "type": "stat",
-      "title": "VRAM",
-      "description": "",
+      "title": "VRAM %",
+      "description": "Framebuffer used as a share of total.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -240,7 +240,7 @@
     {
       "type": "stat",
       "title": "Capped",
-      "description": "Time throttled, last 5m. Idle excluded.",
+      "description": "% of samples in the last 5m with a clock-limiting flag set. The idle flag is excluded.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -303,7 +303,7 @@
     {
       "type": "stat",
       "title": "Power",
-      "description": "",
+      "description": "Current board power draw.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -358,7 +358,7 @@
     {
       "type": "stat",
       "title": "Temp",
-      "description": "",
+      "description": "GPU core temperature.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -420,8 +420,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Occupied vs working",
-      "description": "Util high with capped rising = occupied but throttled. Util high with mem bw high = bandwidth-bound.",
+      "title": "Util, bandwidth, throttle",
+      "description": "util = % time a kernel was resident.  mem bw = % time the memory controller was active.  capped = % of samples with a clock-limiting flag set.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -491,7 +491,7 @@
     {
       "type": "timeseries",
       "title": "VRAM",
-      "description": "Weights stay resident at 0% util. Evict on util and you pay the reload.",
+      "description": "used = framebuffer currently allocated.  total = card capacity.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -551,7 +551,7 @@
     {
       "type": "timeseries",
       "title": "Clocks",
-      "description": "",
+      "description": "sm = shader/compute clock.  mem = memory clock.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -611,7 +611,7 @@
     {
       "type": "timeseries",
       "title": "Power vs limit",
-      "description": "",
+      "description": "draw = current board power.  limit = enforced power cap.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -671,7 +671,7 @@
     {
       "type": "timeseries",
       "title": "Energy",
-      "description": "",
+      "description": "avg = watts derived from the total-energy counter over 5m.  instant = point-in-time reading.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -731,7 +731,7 @@
     {
       "type": "timeseries",
       "title": "Thermals",
-      "description": "",
+      "description": "core = GPU die.  mem = memory junction.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -791,7 +791,7 @@
     {
       "type": "stat",
       "title": "Throttle reason",
-      "description": "",
+      "description": "Bitmask of currently active clock-limiting reasons. 1 = idle downclock.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -892,7 +892,7 @@
     {
       "type": "stat",
       "title": "XID",
-      "description": "",
+      "description": "Last driver-level error code reported for this GPU.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -961,7 +961,7 @@
     {
       "type": "timeseries",
       "title": "PCIe replays",
-      "description": "",
+      "description": "PCIe link-layer retransmits in the last 10 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
