@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 10,
+  "version": 11,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -89,8 +89,8 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 5,
-        "h": 5
+        "w": 8,
+        "h": 4
       },
       "timeFrom": "now/d",
       "hideTimeOverride": true,
@@ -186,10 +186,10 @@
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 5,
+        "x": 8,
         "y": 0,
-        "w": 5,
-        "h": 5
+        "w": 8,
+        "h": 4
       },
       "timeFrom": "now/d",
       "hideTimeOverride": true,
@@ -286,10 +286,10 @@
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 10,
+        "x": 16,
         "y": 0,
-        "w": 5,
-        "h": 5
+        "w": 8,
+        "h": 4
       },
       "timeFrom": "now/M",
       "hideTimeOverride": true,
@@ -378,28 +378,29 @@
     },
     {
       "type": "timeseries",
-      "title": "Power",
-      "description": "draw = current board power.  limit = enforced power cap.",
+      "title": "Energy per hour \u2014 last 7 days",
+      "description": "kWh drawn in each clock hour. Tall bars are busy hours; flat low bars are idle.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 15,
-        "y": 0,
-        "w": 9,
-        "h": 5
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 7
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "watt",
+          "unit": "kwatth",
           "min": 0,
           "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 6,
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "barAlignment": 0,
             "showPoints": "never",
-            "spanNulls": true
+            "spanNulls": false
           }
         },
         "overrides": []
@@ -411,30 +412,24 @@
           "calcs": []
         },
         "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+          "mode": "single",
+          "sort": "none"
         }
       },
       "targets": [
         {
-          "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "draw",
+          "expr": "increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[1h]) / 3.6e9",
+          "legendFormat": "kWh",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
-          }
-        },
-        {
-          "expr": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "limit",
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
+          },
+          "interval": "1h"
         }
-      ]
+      ],
+      "timeFrom": "7d",
+      "hideTimeOverride": true
     },
     {
       "type": "stat",
@@ -446,7 +441,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 5,
+        "y": 11,
         "w": 4,
         "h": 4
       },
@@ -501,7 +496,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 5,
+        "y": 11,
         "w": 4,
         "h": 4
       },
@@ -556,7 +551,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 5,
+        "y": 11,
         "w": 4,
         "h": 4
       },
@@ -619,7 +614,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 5,
+        "y": 11,
         "w": 4,
         "h": 4
       },
@@ -682,7 +677,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 5,
+        "y": 11,
         "w": 4,
         "h": 4
       },
@@ -737,7 +732,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 5,
+        "y": 11,
         "w": 4,
         "h": 4
       },
@@ -800,7 +795,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 9,
+        "y": 15,
         "w": 24,
         "h": 8
       },
@@ -870,7 +865,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 17,
+        "y": 23,
         "w": 12,
         "h": 7
       },
@@ -930,7 +925,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 17,
+        "y": 23,
         "w": 12,
         "h": 7
       },
@@ -982,6 +977,126 @@
     },
     {
       "type": "timeseries",
+      "title": "Power vs limit",
+      "description": "draw = current board power.  limit = enforced power cap.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
+          "legendFormat": "draw",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT{node=\"$node\", gpu=~\"$gpu\"}",
+          "legendFormat": "limit",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Energy rate",
+      "description": "avg = watts derived from the total-energy counter over 5m.  instant = point-in-time reading.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 30,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[5m]) / 1000",
+          "legendFormat": "avg",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
+          "legendFormat": "instant",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
       "title": "Thermals",
       "description": "core = GPU die temperature. GeForce exposes no memory-junction sensor.",
       "datasource": {
@@ -989,10 +1104,10 @@
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 0,
-        "y": 24,
+        "x": 16,
+        "y": 30,
         "w": 8,
-        "h": 5
+        "h": 6
       },
       "fieldConfig": {
         "defaults": {
@@ -1040,9 +1155,9 @@
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 8,
-        "y": 24,
-        "w": 8,
+        "x": 0,
+        "y": 36,
+        "w": 12,
         "h": 5
       },
       "fieldConfig": {
@@ -1141,9 +1256,9 @@
         "uid": "${datasource}"
       },
       "gridPos": {
-        "x": 16,
-        "y": 24,
-        "w": 8,
+        "x": 12,
+        "y": 36,
+        "w": 12,
         "h": 5
       },
       "fieldConfig": {
