@@ -9,7 +9,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -76,7 +76,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "### AI substrate \u2014 occupancy is not work\n`DCGM_FI_DEV_GPU_UTIL` reports only that **a kernel was resident**. A card pinned at 100% can be nearly idle; a card at 0% can be holding gigabytes of weights that must not be evicted. Every panel here is arranged so that number can be checked against something real.\n\n**On this card the profiling fields are unavailable.** `DCGM_FI_PROF_*` (SM_ACTIVE, DRAM_ACTIVE) are Data Center Profiling fields and the module does not load on GeForce \u2014 a product boundary, not a misconfiguration. So work is inferred from three angles instead: **memory-controller utilization** as a bandwidth proxy, **clocks** as evidence of throttling, and **violation counters** for how long a tenant was actually being capped. Coarser than SM_ACTIVE. Still enough to catch every lie util tells."
+        "content": "### AI substrate \u2014 occupancy is not work\n`DCGM_FI_DEV_GPU_UTIL` reports only that **a kernel was resident**. A card pinned at 100% can be nearly idle; a card at 0% can be holding gigabytes of weights that must not be evicted. Every panel here is arranged so that number can be checked against something real.\n\n**On this card the profiling fields are unavailable.** `DCGM_FI_PROF_*` (SM_ACTIVE, DRAM_ACTIVE) are Data Center Profiling fields and the module does not load on GeForce \u2014 a product boundary, not a misconfiguration. So work is inferred from three angles instead: **memory-controller utilization** as a bandwidth proxy, **clocks** as evidence of throttling, and the **throttle-reason bitmask** for how often a real cap was in force. Coarser than SM_ACTIVE. Still enough to catch every lie util tells."
       }
     },
     {
@@ -254,8 +254,8 @@
     },
     {
       "type": "stat",
-      "title": "Throttled (5m)",
-      "description": "Fraction of the last 5 minutes spent capped by power or thermals. A duration you can hold an SLO against, not a flag you have to catch in the act.",
+      "title": "Capped (5m)",
+      "description": "Percent of samples in the last 5 minutes where the throttle bitmask showed a REAL cap. Bit 0 (value 1) is GPU-idle and is excluded \u2014 idle downclocking is not throttling. Derived from the bitmask because the DCGM violation counters are not trustworthy on this card; see collector/gpu/README.md.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -305,7 +305,7 @@
       },
       "targets": [
         {
-          "expr": "(rate(DCGM_FI_DEV_POWER_VIOLATION{node=\"$node\", gpu=~\"$gpu\"}[5m]) + rate(DCGM_FI_DEV_THERMAL_VIOLATION{node=\"$node\", gpu=~\"$gpu\"}[5m])) / 1e4",
+          "expr": "100 * avg_over_time((DCGM_FI_DEV_CLOCK_THROTTLE_REASONS{node=\"$node\", gpu=~\"$gpu\"} > bool 1)[5m:])",
           "legendFormat": "{{gpu}}",
           "refId": "A",
           "datasource": {
@@ -436,7 +436,7 @@
     {
       "type": "timeseries",
       "title": "OCCUPIED vs WORKING \u2014 util against memory pressure and throttling",
-      "description": "The headline. Util riding at 100% while the throttle series climbs means the card is occupied and being actively capped \u2014 the work is not getting done and nothing in a stock dashboard says so. Util at 100% with memory controller also high is a bandwidth-bound decode loop: more SMs would not help it.",
+      "description": "The headline. Util riding at 100% while the throttle series climbs means the card is occupied and being capped \u2014 the work is not getting done and nothing in a stock dashboard says so. Util at 100% with memory controller also high is a bandwidth-bound decode loop: more SMs would not help it.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -497,8 +497,8 @@
           }
         },
         {
-          "expr": "(rate(DCGM_FI_DEV_POWER_VIOLATION{node=\"$node\", gpu=~\"$gpu\"}[2m]) + rate(DCGM_FI_DEV_THERMAL_VIOLATION{node=\"$node\", gpu=~\"$gpu\"}[2m])) / 1e4",
-          "legendFormat": "gpu {{gpu}} \u2014 % time throttled",
+          "expr": "100 * avg_over_time((DCGM_FI_DEV_CLOCK_THROTTLE_REASONS{node=\"$node\", gpu=~\"$gpu\"} > bool 1)[5m:])",
+          "legendFormat": "gpu {{gpu}} \u2014 % time capped",
           "refId": "C",
           "datasource": {
             "type": "prometheus",
