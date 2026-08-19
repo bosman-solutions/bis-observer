@@ -4,12 +4,11 @@
   "tags": [
     "bis",
     "gpu",
-    "ai",
-    "authored"
+    "ai"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -24,7 +23,7 @@
         "type": "datasource",
         "query": "prometheus",
         "current": {},
-        "label": "Datasource"
+        "hide": 2
       },
       {
         "name": "node",
@@ -66,30 +65,16 @@
   },
   "panels": [
     {
-      "type": "text",
-      "title": "",
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 24,
-        "h": 5
-      },
-      "options": {
-        "mode": "markdown",
-        "content": "### AI substrate \u2014 occupancy is not work\n`DCGM_FI_DEV_GPU_UTIL` reports only that **a kernel was resident**. A card pinned at 100% can be nearly idle; a card at 0% can be holding gigabytes of weights that must not be evicted. Every panel here is arranged so that number can be checked against something real.\n\n**On this card the profiling fields are unavailable.** `DCGM_FI_PROF_*` (SM_ACTIVE, DRAM_ACTIVE) are Data Center Profiling fields and the module does not load on GeForce \u2014 a product boundary, not a misconfiguration. So work is inferred from three angles instead: **memory-controller utilization** as a bandwidth proxy, **clocks** as evidence of throttling, and the **throttle-reason bitmask** for how often a real cap was in force. Coarser than SM_ACTIVE. Still enough to catch every lie util tells."
-      }
-    },
-    {
       "type": "stat",
-      "title": "GPU util (naive)",
-      "description": "Kernel residency. The control series \u2014 never the verdict.",
+      "title": "Util",
+      "description": "Kernel residency, not work done.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 5,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -125,7 +110,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_GPU_UTIL{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "{{gpu}}",
+          "legendFormat": "",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -136,15 +121,15 @@
     },
     {
       "type": "stat",
-      "title": "Memory controller",
-      "description": "Percent of time the memory controller was busy. Bandwidth proxy: decode is bandwidth-bound, so this tracks token throughput more closely than util does.",
+      "title": "Mem BW",
+      "description": "Memory controller busy. Bandwidth proxy.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 4,
-        "y": 5,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -180,7 +165,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_MEM_COPY_UTIL{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "{{gpu}}",
+          "legendFormat": "",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -191,22 +176,22 @@
     },
     {
       "type": "stat",
-      "title": "VRAM claimed",
-      "description": "The parcel map. Decides whether the next model load succeeds, regardless of how idle the card looks.",
+      "title": "VRAM",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 8,
-        "y": 5,
+        "y": 0,
         "w": 4,
         "h": 4
       },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "decimals": 1,
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -243,7 +228,7 @@
       "targets": [
         {
           "expr": "100 * DCGM_FI_DEV_FB_USED{node=\"$node\", gpu=~\"$gpu\"} / clamp_min(DCGM_FI_DEV_FB_TOTAL{node=\"$node\", gpu=~\"$gpu\"}, 1)",
-          "legendFormat": "{{gpu}}",
+          "legendFormat": "",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -254,28 +239,28 @@
     },
     {
       "type": "stat",
-      "title": "Capped (5m)",
-      "description": "Percent of samples in the last 5 minutes where the throttle bitmask showed a REAL cap. Bit 0 (value 1) is GPU-idle and is excluded \u2014 idle downclocking is not throttling. Derived from the bitmask because the DCGM violation counters are not trustworthy on this card; see collector/gpu/README.md.",
+      "title": "Capped",
+      "description": "Time throttled, last 5m. Idle excluded.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
-        "y": 5,
+        "y": 0,
         "w": 4,
         "h": 4
       },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "decimals": 1,
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
               },
               {
@@ -306,7 +291,7 @@
       "targets": [
         {
           "expr": "100 * avg_over_time((DCGM_FI_DEV_CLOCK_THROTTLE_REASONS{node=\"$node\", gpu=~\"$gpu\"} > bool 1)[5m:])",
-          "legendFormat": "{{gpu}}",
+          "legendFormat": "",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -325,14 +310,14 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 5,
+        "y": 0,
         "w": 4,
         "h": 4
       },
       "fieldConfig": {
         "defaults": {
           "unit": "watt",
-          "decimals": 1,
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -361,7 +346,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "{{gpu}}",
+          "legendFormat": "",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -372,7 +357,7 @@
     },
     {
       "type": "stat",
-      "title": "GPU temp",
+      "title": "Temp",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -380,7 +365,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 5,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -424,7 +409,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_GPU_TEMP{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "{{gpu}}",
+          "legendFormat": "",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -435,17 +420,17 @@
     },
     {
       "type": "timeseries",
-      "title": "OCCUPIED vs WORKING \u2014 util against memory pressure and throttling",
-      "description": "The headline. Util riding at 100% while the throttle series climbs means the card is occupied and being capped \u2014 the work is not getting done and nothing in a stock dashboard says so. Util at 100% with memory controller also high is a bandwidth-bound decode loop: more SMs would not help it.",
+      "title": "Occupied vs working",
+      "description": "Util high with capped rising = occupied but throttled. Util high with mem bw high = bandwidth-bound.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 9,
+        "y": 4,
         "w": 24,
-        "h": 9
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
@@ -454,7 +439,7 @@
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
-            "fillOpacity": 4,
+            "fillOpacity": 6,
             "showPoints": "never",
             "spanNulls": true
           },
@@ -464,13 +449,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "last",
-            "max",
-            "mean"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -480,7 +461,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_GPU_UTIL{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 util (naive)",
+          "legendFormat": "util",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -489,7 +470,7 @@
         },
         {
           "expr": "DCGM_FI_DEV_MEM_COPY_UTIL{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 memory controller",
+          "legendFormat": "mem bw",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -498,7 +479,7 @@
         },
         {
           "expr": "100 * avg_over_time((DCGM_FI_DEV_CLOCK_THROTTLE_REASONS{node=\"$node\", gpu=~\"$gpu\"} > bool 1)[5m:])",
-          "legendFormat": "gpu {{gpu}} \u2014 % time capped",
+          "legendFormat": "capped",
           "refId": "C",
           "datasource": {
             "type": "prometheus",
@@ -509,17 +490,17 @@
     },
     {
       "type": "timeseries",
-      "title": "RESIDENT BUT IDLE \u2014 the must-not-evict signal",
-      "description": "Weights loaded and waiting read as 0% util. Any scheduler that treats util as occupancy will happily evict a warm model and pay the reload. VRAM is the only signal that reads this correctly \u2014 which is why it, not util, is the right basis for a multi-tenant admission decision.",
+      "title": "VRAM",
+      "description": "Weights stay resident at 0% util. Evict on util and you pay the reload.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 12,
         "w": 12,
-        "h": 8
+        "h": 7
       },
       "fieldConfig": {
         "defaults": {
@@ -537,13 +518,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "last",
-            "max",
-            "mean"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -553,7 +530,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_FB_USED{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 VRAM used (MiB)",
+          "legendFormat": "used",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -562,7 +539,7 @@
         },
         {
           "expr": "DCGM_FI_DEV_FB_TOTAL{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 VRAM total (MiB)",
+          "legendFormat": "total",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -573,17 +550,17 @@
     },
     {
       "type": "timeseries",
-      "title": "Clocks \u2014 cause and effect with the throttle series above",
-      "description": "Clocks falling under steady load is throttling made visible. One tenant's power draw caps another tenant's clocks, and the victim's slowdown looks like its own bug.",
+      "title": "Clocks",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 12,
-        "y": 18,
+        "y": 12,
         "w": 12,
-        "h": 8
+        "h": 7
       },
       "fieldConfig": {
         "defaults": {
@@ -601,13 +578,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "last",
-            "max",
-            "mean"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -617,7 +590,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_SM_CLOCK{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 SM clock",
+          "legendFormat": "sm",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -626,7 +599,7 @@
         },
         {
           "expr": "DCGM_FI_DEV_MEM_CLOCK{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 memory clock",
+          "legendFormat": "mem",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -637,17 +610,17 @@
     },
     {
       "type": "timeseries",
-      "title": "Power draw vs enforced limit",
-      "description": "Draw pinned to the limit line is the cause; the clock panel is the effect.",
+      "title": "Power vs limit",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 19,
         "w": 8,
-        "h": 7
+        "h": 6
       },
       "fieldConfig": {
         "defaults": {
@@ -665,13 +638,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "last",
-            "max",
-            "mean"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -681,7 +650,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 draw",
+          "legendFormat": "draw",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -690,7 +659,7 @@
         },
         {
           "expr": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 limit",
+          "legendFormat": "limit",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -701,17 +670,17 @@
     },
     {
       "type": "timeseries",
-      "title": "Energy rate \u2014 cross-check and the cost basis",
-      "description": "Millijoules integrated over time, so it catches spikes between samples that the instantaneous gauge misses. Divided by tokens served this becomes energy per token \u2014 the unit that turns a GPU dashboard into a cost argument.",
+      "title": "Energy",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 8,
-        "y": 26,
+        "y": 19,
         "w": 8,
-        "h": 7
+        "h": 6
       },
       "fieldConfig": {
         "defaults": {
@@ -729,13 +698,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "last",
-            "max",
-            "mean"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -745,7 +710,7 @@
       "targets": [
         {
           "expr": "rate(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[5m]) / 1000",
-          "legendFormat": "gpu {{gpu}} \u2014 W (from energy counter)",
+          "legendFormat": "avg",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -754,7 +719,7 @@
         },
         {
           "expr": "DCGM_FI_DEV_POWER_USAGE{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 W (instantaneous)",
+          "legendFormat": "instant",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -773,9 +738,9 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 26,
+        "y": 19,
         "w": 8,
-        "h": 7
+        "h": 6
       },
       "fieldConfig": {
         "defaults": {
@@ -793,13 +758,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "last",
-            "max",
-            "mean"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -809,7 +770,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_GPU_TEMP{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 core",
+          "legendFormat": "core",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -818,7 +779,7 @@
         },
         {
           "expr": "DCGM_FI_DEV_MEMORY_TEMP{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "gpu {{gpu}} \u2014 memory",
+          "legendFormat": "mem",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -829,15 +790,15 @@
     },
     {
       "type": "stat",
-      "title": "Throttle reason (live bitmask)",
-      "description": "Bit flags \u2014 combinations appear as a raw sum (12 = SW power cap + HW slowdown). Live state; the violation counters above are the durable record.",
+      "title": "Throttle reason",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 33,
+        "y": 25,
         "w": 8,
         "h": 5
       },
@@ -850,35 +811,35 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "None",
+                  "text": "none",
                   "color": "green"
                 },
                 "1": {
-                  "text": "GPU idle",
+                  "text": "idle",
                   "color": "text"
                 },
                 "2": {
-                  "text": "App clocks",
+                  "text": "app clocks",
                   "color": "yellow"
                 },
                 "4": {
-                  "text": "SW POWER CAP",
+                  "text": "sw power cap",
                   "color": "orange"
                 },
                 "8": {
-                  "text": "HW SLOWDOWN",
+                  "text": "hw slowdown",
                   "color": "red"
                 },
                 "32": {
-                  "text": "SW THERMAL",
+                  "text": "sw thermal",
                   "color": "orange"
                 },
                 "64": {
-                  "text": "HW THERMAL",
+                  "text": "hw thermal",
                   "color": "red"
                 },
                 "128": {
-                  "text": "HW POWER BRAKE",
+                  "text": "hw power brake",
                   "color": "red"
                 }
               }
@@ -919,7 +880,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_CLOCK_THROTTLE_REASONS{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "{{gpu}}",
+          "legendFormat": "",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -930,15 +891,15 @@
     },
     {
       "type": "stat",
-      "title": "Last XID error",
-      "description": "Driver fault code \u2014 the error class host monitoring has never seen. 13/31 is a bad kernel; 48/79 is hardware or a card that fell off the bus.",
+      "title": "XID",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 8,
-        "y": 33,
+        "y": 25,
         "w": 8,
         "h": 5
       },
@@ -988,7 +949,7 @@
       "targets": [
         {
           "expr": "DCGM_FI_DEV_XID_ERRORS{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "{{gpu}}",
+          "legendFormat": "",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -999,15 +960,15 @@
     },
     {
       "type": "timeseries",
-      "title": "PCIe replays \u2014 link health",
-      "description": "Nonzero on a passthrough card is worth attention \u2014 it is the link between the guest and the silicon.",
+      "title": "PCIe replays",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "x": 16,
-        "y": 33,
+        "y": 25,
         "w": 8,
         "h": 5
       },
@@ -1027,13 +988,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "last",
-            "max",
-            "mean"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -1043,7 +1000,7 @@
       "targets": [
         {
           "expr": "increase(DCGM_FI_DEV_PCIE_REPLAY_COUNTER{node=\"$node\", gpu=~\"$gpu\"}[10m])",
-          "legendFormat": "gpu {{gpu}} \u2014 replays/10m",
+          "legendFormat": "10m",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
