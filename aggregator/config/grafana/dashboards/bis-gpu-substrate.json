@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 6,
+  "version": 7,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -24,6 +24,17 @@
         "query": "prometheus",
         "current": {},
         "hide": 2
+      },
+      {
+        "name": "rate",
+        "type": "textbox",
+        "label": "$/kWh",
+        "query": "0.16",
+        "current": {
+          "text": "0.16",
+          "value": "0.16"
+        },
+        "options": []
       },
       {
         "name": "node",
@@ -66,6 +77,344 @@
   "panels": [
     {
       "type": "stat",
+      "title": "Energy today",
+      "description": "Since midnight. Card draw only; excludes PSU losses and the rest of the machine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9",
+          "legendFormat": "",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "timeFrom": "now/d"
+    },
+    {
+      "type": "stat",
+      "title": "Cost today",
+      "description": "Energy today x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "(increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9) * $rate",
+          "legendFormat": "",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "timeFrom": "now/d"
+    },
+    {
+      "type": "stat",
+      "title": "Energy yesterday",
+      "description": "Full previous day. Card draw only; excludes PSU losses and the rest of the machine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9",
+          "legendFormat": "",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "timeFrom": "1d/d",
+      "timeShift": "1d/d"
+    },
+    {
+      "type": "stat",
+      "title": "Cost yesterday",
+      "description": "Energy yesterday x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "(increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9) * $rate",
+          "legendFormat": "",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "timeFrom": "1d/d",
+      "timeShift": "1d/d"
+    },
+    {
+      "type": "stat",
+      "title": "Energy this month",
+      "description": "Since the 1st. Card draw only; excludes PSU losses and the rest of the machine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9",
+          "legendFormat": "",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "timeFrom": "1M/M"
+    },
+    {
+      "type": "stat",
+      "title": "Cost this month",
+      "description": "Energy this month x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "(increase(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{node=\"$node\", gpu=~\"$gpu\"}[$__range]) / 3.6e9) * $rate",
+          "legendFormat": "",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "timeFrom": "1M/M"
+    },
+    {
+      "type": "stat",
       "title": "Util",
       "description": "% of time at least one kernel was resident on the GPU.",
       "datasource": {
@@ -74,7 +423,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -129,7 +478,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 0,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -184,7 +533,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 0,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -247,7 +596,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 0,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -310,7 +659,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 0,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -365,7 +714,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 0,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -428,7 +777,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 8,
         "w": 24,
         "h": 8
       },
@@ -498,7 +847,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 16,
         "w": 12,
         "h": 7
       },
@@ -558,7 +907,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 12,
+        "y": 16,
         "w": 12,
         "h": 7
       },
@@ -618,7 +967,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 23,
         "w": 8,
         "h": 6
       },
@@ -678,7 +1027,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 19,
+        "y": 23,
         "w": 8,
         "h": 6
       },
@@ -738,7 +1087,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 19,
+        "y": 23,
         "w": 8,
         "h": 6
       },
@@ -789,7 +1138,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 25,
+        "y": 29,
         "w": 8,
         "h": 5
       },
@@ -890,7 +1239,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 25,
+        "y": 29,
         "w": 8,
         "h": 5
       },
@@ -959,7 +1308,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 25,
+        "y": 29,
         "w": 8,
         "h": 5
       },
