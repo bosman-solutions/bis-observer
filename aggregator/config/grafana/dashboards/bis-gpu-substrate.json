@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 8,
+  "version": 9,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -63,130 +63,24 @@
         },
         "label": "GPU",
         "query": {
-          "query": "label_values(DCGM_FI_DEV_FB_TOTAL{node=\"$node\"}, gpu)",
-          "refId": "g"
+          "query": "query_result(DCGM_FI_DEV_FB_TOTAL{node=\"$node\"})",
+          "refId": "g",
+          "qryType": 3
         },
+        "regex": "/gpu=\"(?<value>[^\"]+)\".*modelName=\"(?<text>[^\"]+)\"/",
         "refresh": 2,
         "sort": 1,
         "current": {},
         "includeAll": true,
-        "multi": true
+        "multi": true,
+        "allValue": ".*"
       }
     ]
   },
   "panels": [
     {
       "type": "stat",
-      "title": "Card",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 3
-      },
-      "description": "Model as reported by the driver, with bus address and UUID.",
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "graphMode": "none",
-        "colorMode": "none",
-        "textMode": "name",
-        "justifyMode": "center"
-      },
-      "targets": [
-        {
-          "expr": "DCGM_FI_DEV_FB_TOTAL{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "{{modelName}}   \u00b7   gpu {{gpu}}   \u00b7   {{pci_bus_id}}",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "VRAM total",
-      "description": "Framebuffer capacity of the selected card.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 8,
-        "h": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decmbytes",
-          "decimals": 1,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "graphMode": "area",
-        "colorMode": "value",
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "DCGM_FI_DEV_FB_TOTAL{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "",
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "Energy today",
+      "title": "Energy \u2014 today",
       "description": "Since midnight. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
@@ -194,7 +88,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -238,11 +132,12 @@
           }
         }
       ],
-      "timeFrom": "now/d"
+      "timeFrom": "now/d",
+      "hideTimeOverride": true
     },
     {
       "type": "stat",
-      "title": "Cost today",
+      "title": "Cost \u2014 today",
       "description": "Energy today x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
@@ -250,7 +145,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 3,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -294,11 +189,12 @@
           }
         }
       ],
-      "timeFrom": "now/d"
+      "timeFrom": "now/d",
+      "hideTimeOverride": true
     },
     {
       "type": "stat",
-      "title": "Energy yesterday",
+      "title": "Energy \u2014 yesterday",
       "description": "Full previous day. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
@@ -306,7 +202,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 3,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -350,12 +246,13 @@
           }
         }
       ],
-      "timeFrom": "1d/d",
+      "timeFrom": "now/d",
+      "hideTimeOverride": true,
       "timeShift": "1d/d"
     },
     {
       "type": "stat",
-      "title": "Cost yesterday",
+      "title": "Cost \u2014 yesterday",
       "description": "Energy yesterday x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
@@ -363,7 +260,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 3,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -407,12 +304,13 @@
           }
         }
       ],
-      "timeFrom": "1d/d",
+      "timeFrom": "now/d",
+      "hideTimeOverride": true,
       "timeShift": "1d/d"
     },
     {
       "type": "stat",
-      "title": "Energy this month",
+      "title": "Energy \u2014 this month",
       "description": "Since the 1st. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
@@ -420,7 +318,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 3,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -464,11 +362,12 @@
           }
         }
       ],
-      "timeFrom": "1M/M"
+      "timeFrom": "now/M",
+      "hideTimeOverride": true
     },
     {
       "type": "stat",
-      "title": "Cost this month",
+      "title": "Cost \u2014 this month",
       "description": "Energy this month x $/kWh. Card draw only; excludes PSU losses and the rest of the machine.",
       "datasource": {
         "type": "prometheus",
@@ -476,7 +375,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 3,
+        "y": 0,
         "w": 4,
         "h": 4
       },
@@ -520,7 +419,8 @@
           }
         }
       ],
-      "timeFrom": "1M/M"
+      "timeFrom": "now/M",
+      "hideTimeOverride": true
     },
     {
       "type": "stat",
@@ -532,7 +432,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -587,7 +487,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 7,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -642,7 +542,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 7,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -705,7 +605,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 7,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -768,7 +668,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 7,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -823,7 +723,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 7,
+        "y": 4,
         "w": 4,
         "h": 4
       },
@@ -886,7 +786,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 11,
+        "y": 8,
         "w": 24,
         "h": 8
       },
@@ -956,7 +856,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 16,
         "w": 12,
         "h": 7
       },
@@ -1016,7 +916,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 19,
+        "y": 16,
         "w": 12,
         "h": 7
       },
@@ -1076,7 +976,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 23,
         "w": 8,
         "h": 6
       },
@@ -1136,7 +1036,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 26,
+        "y": 23,
         "w": 8,
         "h": 6
       },
@@ -1196,7 +1096,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 26,
+        "y": 23,
         "w": 8,
         "h": 6
       },
@@ -1247,7 +1147,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 29,
         "w": 8,
         "h": 5
       },
@@ -1348,7 +1248,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 32,
+        "y": 29,
         "w": 8,
         "h": 5
       },
@@ -1417,7 +1317,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 32,
+        "y": 29,
         "w": 8,
         "h": 5
       },
