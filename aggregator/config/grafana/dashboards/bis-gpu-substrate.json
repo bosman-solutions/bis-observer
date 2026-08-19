@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 5,
+  "version": 6,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -731,7 +731,7 @@
     {
       "type": "timeseries",
       "title": "Thermals",
-      "description": "core = GPU die.  mem = memory junction.",
+      "description": "core = GPU die temperature. GeForce exposes no memory-junction sensor.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -772,15 +772,6 @@
           "expr": "DCGM_FI_DEV_GPU_TEMP{node=\"$node\", gpu=~\"$gpu\"}",
           "legendFormat": "core",
           "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          }
-        },
-        {
-          "expr": "DCGM_FI_DEV_MEMORY_TEMP{node=\"$node\", gpu=~\"$gpu\"}",
-          "legendFormat": "mem",
-          "refId": "B",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"

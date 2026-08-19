@@ -56,7 +56,11 @@ DCGM_FI_DEV_MEM_CLOCK,                gauge, Memory clock (MHz)
 DCGM_FI_DEV_POWER_USAGE,              gauge, Power draw (W)
 DCGM_FI_DEV_ENFORCED_POWER_LIMIT,     gauge, Enforced power limit (W)
 DCGM_FI_DEV_GPU_TEMP,                 gauge, GPU core temperature (C)
-DCGM_FI_DEV_MEMORY_TEMP,              gauge, Memory temperature (C)
+# REMOVED — DCGM_FI_DEV_MEMORY_TEMP. GeForce has no memory-junction sensor;
+# nvidia-smi reports temperature.memory = N/A and DCGM turns that into a
+# hard 0. Same failure as the violation counters: it emits, so it passed the
+# presence check, but 0 C is not a reading — it is "unsupported" wearing the
+# costume of a measurement.
 # Millijoules, monotonic. Divided by tokens served it gives energy per token —
 # the unit that turns a GPU dashboard into a cost argument.
 DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION, counter, Total energy consumed since boot (mJ)
