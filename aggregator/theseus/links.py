@@ -1,8 +1,20 @@
 """
 links.py — Grafana deeplink generator for bis-theseus.
 
-Builds Grafana Explore URLs for hosts, services, and containers.
-Links are generated once on discovery and stored in the sidecar.
+Two families of link live here, and they are not interchangeable.
+
+DETAIL links (detail_url and friends) point at the provisioned detail
+dashboards — bis-node-detail, bis-container-detail — with the subject carried
+in template variables. These are what the bis-starmap identity card links to.
+They work for a Viewer, they carry no encoded query, and they survive a
+datasource being renamed, because the dashboard picks its own datasource.
+
+EXPLORE links (*_explore_url) encode a whole query set into the URL and drop
+the reader into the query editor. They are the richer tool and the wrong
+default: Explore requires the Editor role, and the viewers_can_edit escape
+hatch was removed in Grafana 12. Anyone reading the map as an anonymous
+Viewer cannot open one. Keep them for authenticated operators — the
+aggroboard row links — and use the detail links for anything public.
 
 Grafana Explore URL shape:
   /explore?orgId=1&left=<base64url(JSON)>
@@ -12,6 +24,75 @@ The left param encodes datasource, queries, and time range.
 
 import base64
 import json
+from urllib.parse import quote
+
+# Dashboard UIDs — must match the "uid" field in the provisioned JSON under
+# config/grafana/provisioning/dashboards/. Changing one here without changing
+# it there yields a 404, so they are named constants rather than inline strings.
+NODE_DASHBOARD_UID      = "bis-node-detail"
+CONTAINER_DASHBOARD_UID = "bis-container-detail"
+
+DEFAULT_FROM = "now-3h"
+DEFAULT_TO   = "now"
+
+
+def _detail_url(
+    grafana_url: str,
+    uid: str,
+    slug: str,
+    variables: dict[str, str],
+    time_from: str = DEFAULT_FROM,
+    time_to: str = DEFAULT_TO,
+) -> str:
+    """
+    Build a dashboard deeplink: /d/<uid>/<slug>?var-x=y&from=…&to=…
+
+    No datasource UID is embedded. The dashboard carries a datasource-type
+    template variable that defaults to the org default, so a fork with a
+    differently-provisioned Prometheus gets working links for free.
+    """
+    params = [f"var-{k}={quote(str(v), safe='')}" for k, v in variables.items()]
+    params += [f"from={quote(time_from, safe='')}", f"to={quote(time_to, safe='')}", "orgId=1"]
+    return f"{grafana_url}/d/{uid}/{slug}?" + "&".join(params)
+
+
+def node_detail_url(
+    grafana_url: str,
+    instance: str,
+    time_from: str = DEFAULT_FROM,
+    time_to: str = DEFAULT_TO,
+) -> str:
+    """
+    Detail dashboard for one hardware node — bare metal or VM alike.
+
+    instance: the Prometheus instance label, which in this fleet equals the
+    hostname ("cerberus", "melchior") because node-exporter, cadvisor and
+    docker-inventory all label with the bare name rather than host:port.
+    """
+    return _detail_url(
+        grafana_url, NODE_DASHBOARD_UID, "bis-node-detail",
+        {"instance": instance.split(":")[0]}, time_from, time_to,
+    )
+
+
+def container_detail_url(
+    grafana_url: str,
+    instance: str,
+    container_name: str,
+    time_from: str = DEFAULT_FROM,
+    time_to: str = DEFAULT_TO,
+) -> str:
+    """
+    Detail dashboard for one container.
+
+    Both variables are required: container names are unique per host, not per
+    fleet, so the host has to travel with the name.
+    """
+    return _detail_url(
+        grafana_url, CONTAINER_DASHBOARD_UID, "bis-container-detail",
+        {"node": instance.split(":")[0], "container": container_name},
+        time_from, time_to,
+    )
 
 
 def _encode_explore(datasource_uid: str, queries: list[dict], time_range: dict | None = None) -> str:
