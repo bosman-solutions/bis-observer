@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 11,
+  "version": 12,
   "editable": false,
   "graphTooltip": 1,
   "refresh": "10s",
@@ -90,7 +90,7 @@
         "x": 0,
         "y": 0,
         "w": 8,
-        "h": 4
+        "h": 5
       },
       "timeFrom": "now/d",
       "hideTimeOverride": true,
@@ -189,7 +189,7 @@
         "x": 8,
         "y": 0,
         "w": 8,
-        "h": 4
+        "h": 5
       },
       "timeFrom": "now/d",
       "hideTimeOverride": true,
@@ -289,7 +289,7 @@
         "x": 16,
         "y": 0,
         "w": 8,
-        "h": 4
+        "h": 5
       },
       "timeFrom": "now/M",
       "hideTimeOverride": true,
@@ -386,7 +386,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 5,
         "w": 24,
         "h": 7
       },
@@ -441,7 +441,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 11,
+        "y": 14,
         "w": 4,
         "h": 4
       },
@@ -496,7 +496,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 11,
+        "y": 14,
         "w": 4,
         "h": 4
       },
@@ -551,7 +551,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 11,
+        "y": 14,
         "w": 4,
         "h": 4
       },
@@ -614,7 +614,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 11,
+        "y": 14,
         "w": 4,
         "h": 4
       },
@@ -677,7 +677,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 11,
+        "y": 14,
         "w": 4,
         "h": 4
       },
@@ -732,7 +732,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 11,
+        "y": 14,
         "w": 4,
         "h": 4
       },
@@ -795,7 +795,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 18,
         "w": 24,
         "h": 8
       },
@@ -865,7 +865,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 28,
         "w": 12,
         "h": 7
       },
@@ -925,7 +925,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 23,
+        "y": 28,
         "w": 12,
         "h": 7
       },
@@ -985,7 +985,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 35,
         "w": 8,
         "h": 6
       },
@@ -1045,7 +1045,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 30,
+        "y": 35,
         "w": 8,
         "h": 6
       },
@@ -1105,7 +1105,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 30,
+        "y": 35,
         "w": 8,
         "h": 6
       },
@@ -1156,7 +1156,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 36,
+        "y": 41,
         "w": 12,
         "h": 5
       },
@@ -1257,7 +1257,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 36,
+        "y": 41,
         "w": 12,
         "h": 5
       },
@@ -1315,6 +1315,36 @@
           }
         }
       ]
+    },
+    {
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 2
+      },
+      "options": {
+        "mode": "html",
+        "content": "<hr style='border:0;border-top:1px solid rgba(204,204,220,0.25);margin:14px 0 0 0'>"
+      }
+    },
+    {
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 2
+      },
+      "options": {
+        "mode": "html",
+        "content": "<hr style='border:0;border-top:1px solid rgba(204,204,220,0.25);margin:14px 0 0 0'>"
+      }
     }
   ]
 }
