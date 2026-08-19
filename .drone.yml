@@ -11,6 +11,19 @@ trigger:
 # branch is checked out on each node. GitHub Actions (.github/workflows/
 # deploy.yml) additionally deploys main via ansible.
 #
+# DEPLOY IS A RESET, NOT A PULL.
+# Each node does `git checkout -f -B <branch> origin/<branch>`, which forces the
+# working tree to exactly match the pushed commit and discards local edits.
+# `git pull` was the old behaviour and it rots: a node that has been hand-edited
+# or left on a stale/diverged branch either merges unexpectedly or refuses, and
+# then quietly stops matching the repo while CI still reports green. Same failure
+# class as the orphaned k3s playbook on Cerberus — automation that a commit
+# cannot carry. A reset makes the repo the only source of truth for what is
+# running, so nobody has to hand-touch /opt to unstick a node.
+#
+# Consequence, stated plainly: local changes under the deploy path are DESTROYED
+# on every deploy. Author in a clone, push, let the pipeline place it.
+#
 # Required secrets (set in Drone org settings):
 #   drone_deploy  — SSH private key, authorized on all target nodes
 #   deploy_user   — SSH username on target nodes (e.g. disco)
@@ -36,8 +49,9 @@ steps:
       envs:
         - drone_branch
       script:
-        - cd /opt/bis-observer && git checkout -- aggregator/config/grafana/provisioning/dashboards/ 2>/dev/null || true
-        - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make collector
+        - cd /opt/bis-observer && git fetch origin --prune
+        - cd /opt/bis-observer && git checkout -f -B $DRONE_BRANCH origin/$DRONE_BRANCH
+        - cd /opt/bis-observer && make collector
 
   - name: deploy-melchior
     image: appleboy/drone-ssh
@@ -51,8 +65,9 @@ steps:
       envs:
         - drone_branch
       script:
-        - cd /opt/bis-observer && git checkout -- aggregator/config/grafana/provisioning/dashboards/ 2>/dev/null || true
-        - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make aggregator
+        - cd /opt/bis-observer && git fetch origin --prune
+        - cd /opt/bis-observer && git checkout -f -B $DRONE_BRANCH origin/$DRONE_BRANCH
+        - cd /opt/bis-observer && make aggregator
 
   # Gaspar is a laptop — online intermittently. failure: ignore means the pipeline
   # succeeds regardless; deploy runs when he's up, silently skips when he's not.
@@ -70,5 +85,33 @@ steps:
       envs:
         - drone_branch
       script:
-        - cd /opt/bis-observer && git checkout -- aggregator/config/grafana/provisioning/dashboards/ 2>/dev/null || true
-        - cd /opt/bis-observer && git fetch origin && git checkout $DRONE_BRANCH && git pull origin $DRONE_BRANCH && make collector
+        - cd /opt/bis-observer && git fetch origin --prune
+        - cd /opt/bis-observer && git checkout -f -B $DRONE_BRANCH origin/$DRONE_BRANCH
+        - cd /opt/bis-observer && make collector
+
+  # Gato — KVM guest on Balthazar, holds the passthrough RTX 3080. A collector
+  # like any other node; `make collector` detects /dev/nvidiactl and pulls in
+  # collector/gpu/docker-compose.dcgm.yml automatically. No GPU-specific step,
+  # because "is there a GPU here" is a property of the node, not of the pipeline.
+  #
+  # Deliberately LAST and deliberately NOT failure: ignore. Gato was set up by
+  # hand and is not yet known to trust drone_deploy — if the key isn't authorized
+  # this fails loudly, which is what we want, and every node above has already
+  # deployed by the time it runs.
+  #
+  # Note the path: gato's clone is in $HOME, not /opt, from that manual setup.
+  - name: deploy-gato
+    image: appleboy/drone-ssh
+    settings:
+      host: gato
+      user:
+        from_secret: deploy_user
+      key:
+        from_secret: drone_deploy
+      port: 22
+      envs:
+        - drone_branch
+      script:
+        - cd ~/bis-observer && git fetch origin --prune
+        - cd ~/bis-observer && git checkout -f -B $DRONE_BRANCH origin/$DRONE_BRANCH
+        - cd ~/bis-observer && make collector

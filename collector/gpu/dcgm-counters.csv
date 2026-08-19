@@ -1,0 +1,41 @@
+# dcgm-counters.csv — bis-observer GPU profile
+# Replaces dcgm-exporter's default counter set. The default is deliberately
+# conservative and ships the naive view (DCGM_FI_DEV_GPU_UTIL). We keep that
+# field ON PURPOSE so the dashboard can show it lying next to SM_ACTIVE.
+#
+# format: DCGM FIELD, Prometheus metric type, help string
+
+# --- The naive metric, kept as the control -----------------------------------
+# "Percent of time one or more kernels was resident." NOT a busy-ness measure.
+DCGM_FI_DEV_GPU_UTIL,               gauge, GPU utilization percent (naive - kernel residency not work)
+
+# --- Device truth: what the chip is actually doing ---------------------------
+# Requires DCGM profiling (DCP). VERIFY on GeForce - see README risk note.
+DCGM_FI_PROF_SM_ACTIVE,             gauge, Fraction of time at least one warp was active on an SM
+DCGM_FI_PROF_SM_OCCUPANCY,          gauge, Fraction of resident warps vs max supported
+DCGM_FI_PROF_PIPE_TENSOR_ACTIVE,    gauge, Fraction of time the tensor pipes were active
+DCGM_FI_PROF_PIPE_FP16_ACTIVE,      gauge, Fraction of time the fp16 pipe was active
+DCGM_FI_PROF_DRAM_ACTIVE,           gauge, Fraction of time device memory was being read or written
+DCGM_FI_PROF_PCIE_TX_BYTES,         gauge, PCIe bytes transmitted
+DCGM_FI_PROF_PCIE_RX_BYTES,         gauge, PCIe bytes received
+
+# --- Memory: the allocation currency ----------------------------------------
+DCGM_FI_DEV_FB_FREE,                gauge, Framebuffer memory free (MiB)
+DCGM_FI_DEV_FB_USED,                gauge, Framebuffer memory used (MiB)
+DCGM_FI_DEV_FB_TOTAL,               gauge, Framebuffer memory total (MiB)
+
+# --- Power / thermal / clocks: the throttle story ----------------------------
+DCGM_FI_DEV_POWER_USAGE,            gauge, Power draw (W)
+DCGM_FI_DEV_ENFORCED_POWER_LIMIT,   gauge, Enforced power limit (W)
+DCGM_FI_DEV_GPU_TEMP,               gauge, GPU core temperature (C)
+DCGM_FI_DEV_MEMORY_TEMP,            gauge, Memory temperature (C)
+DCGM_FI_DEV_SM_CLOCK,               gauge, SM clock (MHz)
+DCGM_FI_DEV_MEM_CLOCK,              gauge, Memory clock (MHz)
+# The invisible noisy neighbour. Bitmask - nonzero means someone is being capped.
+DCGM_FI_DEV_CLOCK_THROTTLE_REASONS, gauge, Current clock throttle reason bitmask
+
+# --- Health tail: the class classic SRE has never seen -----------------------
+DCGM_FI_DEV_XID_ERRORS,             gauge, Last XID error code raised by the driver
+DCGM_FI_DEV_ECC_SBE_VOL_TOTAL,      counter, Volatile single-bit ECC errors
+DCGM_FI_DEV_ECC_DBE_VOL_TOTAL,      counter, Volatile double-bit ECC errors
+DCGM_FI_DEV_RETIRED_PENDING,        counter, Pages pending retirement

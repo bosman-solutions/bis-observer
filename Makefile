@@ -63,9 +63,14 @@ collector: _set_node_name
 		echo "  armv7 detected — deploying slim collector (no Alloy, no cAdvisor)..."; \
 		docker compose -f $(COLLECTOR_DIR)/docker-compose.armv7.yml --env-file $(COLLECTOR_DIR)/.env up -d; \
 	else \
-		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env up -d; \
+		GPU_ARGS=""; \
+		if [ -e /dev/nvidiactl ] && [ -f $(COLLECTOR_DIR)/gpu/docker-compose.dcgm.yml ]; then \
+			echo "  NVIDIA device present — including GPU overlay (dcgm-exporter)..."; \
+			GPU_ARGS="-f $(COLLECTOR_DIR)/gpu/docker-compose.dcgm.yml"; \
+		fi; \
+		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml $$GPU_ARGS --env-file $(COLLECTOR_DIR)/.env up -d; \
 		echo "  restarting alloy to load config changes (bind mounts don't trigger recreate)..."; \
-		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env restart alloy; \
+		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml $$GPU_ARGS --env-file $(COLLECTOR_DIR)/.env restart alloy; \
 	fi
 	@echo "✓ Collector stack running."
 
