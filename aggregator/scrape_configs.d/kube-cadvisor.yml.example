@@ -37,11 +37,11 @@
     # insecure_skip_verify: true
   static_configs:
     - targets: ["10.0.0.10:6443"]
-      labels: { cluster: arcade, node: cerberus }
+      labels: { cluster: my-cluster, node: node-a }
     - targets: ["10.0.0.10:6443"]
-      labels: { cluster: arcade, node: fido }
+      labels: { cluster: my-cluster, node: node-b }
     - targets: ["10.0.0.10:6443"]
-      labels: { cluster: arcade, node: princess }
+      labels: { cluster: my-cluster, node: node-c }
   relabel_configs:
     # Rewrite the scrape path to this node's kubelet cadvisor proxy endpoint.
     # metrics_path is per-job, so we build it per-target from the `node` label.

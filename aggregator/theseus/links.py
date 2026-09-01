@@ -66,7 +66,7 @@ def node_detail_url(
     Detail dashboard for one hardware node — bare metal or VM alike.
 
     instance: the Prometheus instance label, which in this fleet equals the
-    hostname ("cerberus", "melchior") because node-exporter, cadvisor and
+    hostname ("node-a", "node-b") because node-exporter, cadvisor and
     docker-inventory all label with the bare name rather than host:port.
     """
     return _detail_url(
@@ -117,7 +117,7 @@ def host_explore_url(
 ) -> str:
     """
     Grafana Explore deeplink for a host — cpu, memory, load, disk used%.
-    instance: Prometheus instance label, e.g. "melchior" or "melchior:9100"
+    instance: Prometheus instance label, e.g. "node-a" or "node-a:9100"
     """
     label = f'instance="{instance}"'
     fsfilter = 'fstype!~"tmpfs|squashfs|overlay|devtmpfs|ramfs|efivarfs|fuse.lxcfs"'

@@ -12,9 +12,9 @@ Sidecar schema:
     "version": 1,
     "updated_at": 1780433206,
     "hosts": {
-      "melchior": {
-        "instance": "melchior",
-        "explore_url": "http://melchior:3000/explore?..."
+      "node-a": {
+        "instance": "node-a",
+        "explore_url": "http://<grafana>:3000/explore?..."
       }
     }
   }
