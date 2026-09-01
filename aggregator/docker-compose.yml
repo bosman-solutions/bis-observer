@@ -80,9 +80,34 @@ services:
     restart: unless-stopped
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      # Authored dashboards — tracked in git, read-only so nothing but a deploy
+      # can change them. The generated ones live under provisioning/dashboards
+      # and are written by obs-theseus; see provisioning/dashboards/dashboards.yml.
+      - ./config/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     environment:
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Read-only public access, default OFF. Set GRAFANA_ANON=true on an
+      # estate whose map is meant to be readable by people who do not have an
+      # account — the bis-starmap identity card links into the detail
+      # dashboards, and without this those links land on a login wall.
+      #
+      # Anonymous rather than a shared read-only account on purpose: an account
+      # means a credential in a public URL, which is a secret that has already
+      # leaked. Anonymous has nothing to leak and nothing to rotate.
+      #
+      # The role is Viewer and stays Viewer. A Viewer can read provisioned
+      # dashboards and cannot reach Explore, edit panels, or touch datasources
+      # (which are provisioned editable:false anyway). Do not raise this to
+      # Editor to "make Explore work" — that hands every anonymous reader a
+      # query editor pointed at your Prometheus.
+      - GF_AUTH_ANONYMOUS_ENABLED=${GRAFANA_ANON:-false}
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
+      # Anonymous readers get the dashboard, not the chrome around it.
+      - GF_NEWS_NEWS_FEED_ENABLED=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:

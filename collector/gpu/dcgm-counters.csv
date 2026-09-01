@@ -1,0 +1,74 @@
+# dcgm-counters.csv — bis-observer GPU profile
+# Replaces dcgm-exporter's default counter set.
+#
+# EVERY FIELD BELOW WAS VERIFIED EMITTING ON AN RTX 3080 (driver 595.71.05,
+# dcgm-exporter 3.3.9-3.6.1) on 2026-08-19. Fields that DCGM accepts but the
+# card never populates are worse than useless on a dashboard — an empty panel
+# reads as "healthy" to everyone who didn't build it.
+#
+# NOT AVAILABLE HERE — the DCGM_FI_PROF_* family (SM_ACTIVE, SM_OCCUPANCY,
+# DRAM_ACTIVE, PIPE_TENSOR_ACTIVE). Those are Data Center Profiling (DCP)
+# fields. On GeForce the profiling module never loads:
+#   "Not collecting DCP metrics: This request is serviced by a module of DCGM
+#    that is not currently loaded"
+# It is a product-segmentation boundary, not a permission or config problem —
+# SYS_ADMIN and the nvidia runtime are both present and it still declines.
+# See README.md for what replaces them and what claims that costs us.
+#
+# format: DCGM FIELD, Prometheus metric type, help string
+
+# --- Occupancy vs work -------------------------------------------------------
+# GPU_UTIL is kept deliberately as the CONTROL series. It reports only that a
+# kernel was resident, not that the chip did work.
+DCGM_FI_DEV_GPU_UTIL,                 gauge, GPU utilization percent (kernel residency - NOT work)
+# The stand-in for DRAM_ACTIVE: percent of time the memory controller was busy.
+# Coarser than the profiling field, but it still separates a memory-bound decode
+# loop from a compute-bound prefill, which is the distinction that matters.
+DCGM_FI_DEV_MEM_COPY_UTIL,            gauge, Memory controller utilization percent (bandwidth proxy)
+DCGM_FI_DEV_ENC_UTIL,                 gauge, Video encoder utilization percent
+DCGM_FI_DEV_DEC_UTIL,                 gauge, Video decoder utilization percent
+
+# --- Memory: the allocation currency ----------------------------------------
+# The parcel map. VRAM decides who gets to load, and it is the one signal that
+# reads correctly when a model is resident but idle (util 0, FB_USED 8GB).
+DCGM_FI_DEV_FB_FREE,                  gauge, Framebuffer memory free (MiB)
+DCGM_FI_DEV_FB_USED,                  gauge, Framebuffer memory used (MiB)
+DCGM_FI_DEV_FB_TOTAL,                 gauge, Framebuffer memory total (MiB)
+
+# --- Throttle ----------------------------------------------------------------
+# The bitmask is the ONLY throttle signal trusted here, and it agrees with
+# nvidia-smi exactly. Bit 0 (value 1) is GPU-idle — idle downclocking is not
+# throttling and must be excluded before drawing any conclusion from it.
+DCGM_FI_DEV_CLOCK_THROTTLE_REASONS,   gauge, Clock throttle reason bitmask (1 = idle - NOT a cap)
+#
+# REMOVED — DCGM_FI_DEV_POWER_VIOLATION / THERMAL_VIOLATION.
+# They emit on this card, which is exactly what made them dangerous. Documented
+# as microseconds spent capped, they advanced 30-55x faster than wall clock and
+# moved in jumps rather than accumulating, while nvidia-smi reported
+# sw_power_cap "Not Active" at 18W against a 340W limit. A field that is present
+# but wrong is worse than one that is absent: absent draws an empty panel that
+# invites a question, wrong draws a confident number that ends one. Presence was
+# tested here; meaning was not. That was the mistake.
+
+# --- Clocks / power / thermal: cause and effect ------------------------------
+DCGM_FI_DEV_SM_CLOCK,                 gauge, SM clock (MHz)
+DCGM_FI_DEV_MEM_CLOCK,                gauge, Memory clock (MHz)
+DCGM_FI_DEV_POWER_USAGE,              gauge, Power draw (W)
+DCGM_FI_DEV_ENFORCED_POWER_LIMIT,     gauge, Enforced power limit (W)
+DCGM_FI_DEV_GPU_TEMP,                 gauge, GPU core temperature (C)
+# REMOVED — DCGM_FI_DEV_MEMORY_TEMP. GeForce has no memory-junction sensor;
+# nvidia-smi reports temperature.memory = N/A and DCGM turns that into a
+# hard 0. Same failure as the violation counters: it emits, so it passed the
+# presence check, but 0 C is not a reading — it is "unsupported" wearing the
+# costume of a measurement.
+# Millijoules, monotonic. Divided by tokens served it gives energy per token —
+# the unit that turns a GPU dashboard into a cost argument.
+DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION, counter, Total energy consumed since boot (mJ)
+
+# --- Health tail -------------------------------------------------------------
+DCGM_FI_DEV_XID_ERRORS,               gauge, Last XID error code raised by the driver
+DCGM_FI_DEV_PCIE_REPLAY_COUNTER,      counter, PCIe replay count (link health)
+# GeForce has no ECC. These emit nothing on a 3080 and are kept only so the
+# same file works unchanged on a datacenter card.
+DCGM_FI_DEV_ECC_SBE_VOL_TOTAL,        counter, Volatile single-bit ECC errors (datacenter cards only)
+DCGM_FI_DEV_ECC_DBE_VOL_TOTAL,        counter, Volatile double-bit ECC errors (datacenter cards only)

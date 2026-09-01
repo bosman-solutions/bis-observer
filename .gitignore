@@ -12,6 +12,11 @@ aggregator/scrape_configs.d/*.yml
 aggregator/secrets/*
 !aggregator/secrets/README.md
 
+# GPU scrape config — SOURCE is collector/gpu/config.gpu.alloy. `make collector`
+# copies it here on GPU nodes because Alloy's config dir is a read-only bind and
+# runc cannot create a nested mountpoint inside one. Generated, never edited.
+collector/alloy/config.gpu.alloy
+
 # theseus runtime state — generated dashboards + sidecars.
 # The provider config (dashboards.yml) is tracked; all generated .json is not.
 aggregator/config/grafana/provisioning/dashboards/*.json
