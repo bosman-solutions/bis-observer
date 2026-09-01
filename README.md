@@ -163,6 +163,17 @@ targets (and the `cluster` label) live in the aggregator's
 | GRAFANA_PORT         |          | 3000    | Grafana port exposed on this host        |
 | PROM_RETENTION       |          | 90d     | Prometheus data retention period         |
 | LOKI_RETENTION       |          | 744h    | Loki data retention period (31 days)     |
+| THESEUS_PORT         |          | 8182    | theseus port exposed on this host        |
+| GRAFANA_ANON         |          | false   | Anonymous Viewer-only read; on for a public map |
+| AGGROBOARD_INTERVAL  |          | 60      | theseus heartbeat, seconds               |
+| GRAFANA_URL          |          | http://obs-grafana:3000 | In-network Grafana address theseus calls |
+| GRAFANA_EXTERNAL_URL |          | *(GRAFANA_URL)* | Browser-facing Grafana address used to build DETAILS deeplinks. Set it on any aggregator whose links leave the box — the default only resolves inside the Docker network |
+| GRAFANA_TOKEN        |          | *(none)* | Grafana service account token (Viewer). Secret — see TODO.md |
+| K8S_API_URL          |          | *(none)* | Control-plane API; enables pod log tailing via theseus |
+
+Defaults live in `docker-compose.yml` as `${KEY:-default}`, not in `.env` — a
+node that has never heard of a new key still comes up correctly. Put a key in
+`.env` only when the value differs per machine, or when it is a secret.
 
 
 ## Repo layout

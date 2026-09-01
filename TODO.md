@@ -70,6 +70,64 @@ in-cluster, or apiserver-proxied kubelet logs). Decide the pattern before buildi
 
 *Logged: 2026-06-16 — Weaver 🕸️*
 
+### GPU VRAM / utilization metrics (vfio passthrough)
+The RTX 3080 is PCI-passthrough'd to whichever GPU VM holds it (gato or tiny11),
+bound to `vfio-pci` on the host — so the host CANNOT read it; `nvidia-smi` only
+works inside the holding guest. SCC's `gpu_probe.py` already reads used/total/util
+from inside the holder via the qemu-guest-agent (`guest-exec nvidia-smi`). Plan: a
+host-side Prometheus exporter on Balthazar that calls `gpu_probe.query(<current GPU
+holder>)` and exposes `gpu_vram_used_bytes`, `gpu_vram_total_bytes`,
+`gpu_utilization_percent{vm="…"}`; Alloy scrapes it → remote_write. No in-guest
+exporter needed (esp. Windows/tiny11) — the host pulls through the agent. Depends
+on qemu-guest-agent in each GPU guest (tiny11 done 2026-06-22; gato pending its
+next boot + the carried kernel-module driver fix). Same probe also powers vmctl's
+swap busy-guard, so the data path is shared.
+
+### Windows observability discovery (tiny11)
+The Linux collector pattern (node-exporter + cadvisor + Alloy) doesn't fit a
+Windows node. Do discovery on how to observe tiny11: likely `windows_exporter`
+(CPU/RAM/disk/net/services, Prometheus-native) shipped via Alloy-for-Windows or
+pulled into a `file_sd` target; plus Apollo (stream service) health/log shipping.
+Decide whether tiny11 runs a slim Windows collector or is pulled by the
+aggregator. Docker-on-Windows is NOT the path (Docker Desktop wants a desktop
+session) — a Windows-specific collector + maybe a `Makefile.windows`, not the
+Linux compose stack.
+
+*Logged: 2026-06-22 — Weaver 🕸️*
+
+### Convention: env defaults live in compose, not in .env
+`.env` is gitignored, so it cannot be updated by a deploy — which meant every
+new setting had to be hand-added on every node or the stack came up missing it.
+The fix is to stop putting settings in `.env` at all: give each one a default in
+`docker-compose.yml` as `${KEY:-default}`, so a node that has never heard of a
+new key still comes up correctly. `.env` then carries only what genuinely
+differs per machine, plus secrets.
+
+**When adding a feature:** default it in the compose file, document it in the
+README table, leave `.env.example` alone. Only touch `.env.example` if the value
+cannot have a safe default.
+
+Current state after this pass: the collector has exactly one required key
+(`AGGREGATOR_HOST`, enforced by `make collector`); the aggregator has none.
+
+Not done yet, in order of value:
+- **Secrets don't belong in `.env`.** Plaintext on disk, visible in
+  `docker inspect`. `GRAFANA_TOKEN` is there now and an HA token is coming.
+  Options: ansible-vault (a vault password file already exists on Cerberus) or
+  Docker secrets.
+- **Regenerate rather than patch.** Ideally `.env` is rebuilt from a template on
+  every deploy, the same hard-reset discipline the repo already uses, so nothing
+  hand-edited survives. Blocked: that needs a per-node values source, and one
+  only exists for the Cerberus fleet (`/etc/ansible/hosts` on cerberus). For
+  balthazar/melchior/gato the values exist only inside the `.env` files
+  themselves. Build the fleet inventory first — Drone needs to read it too.
+- **Cerberus's `deploy_collector.yml` copies `.env.example` over `.env` on every
+  run**, wiping anything set by hand. Now redundant — `make` handles the file.
+  Delete that task. Note the playbook is unversioned and lives in
+  `~/deploy_collector.yml` on cerberus.
+
+*Logged: 2026-09-01 — Weaver 🕸️*
+
 ## Done
 
 ### Kubelet per-pod usage via apiserver proxy — 2026-06-18
