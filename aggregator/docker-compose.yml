@@ -129,12 +129,13 @@ services:
     environment:
       - THESEUS_PROM_URL=http://obs-prometheus:9090
       - THESEUS_LOKI_URL=http://obs-loki:3100
-      - GRAFANA_URL=http://obs-grafana:3000
-      - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:-http://obs-grafana:3000}
+      - GRAFANA_URL=${GRAFANA_URL:-http://obs-grafana:3000}
+      - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:-}
       - GRAFANA_TOKEN=${GRAFANA_TOKEN:-}
       - AGGROBOARD_INTERVAL=${AGGROBOARD_INTERVAL:-60}
       - DASHBOARD_PATH=/dashboards/aggroboard.json
       - K8S_API_URL=${K8S_API_URL:-}
+      - K8S_CONTROL_PLANE=${K8S_CONTROL_PLANE:-}
       - K8S_TOKEN_FILE=/etc/theseus/secrets/kube-token
       - K8S_CA_FILE=/etc/theseus/secrets/kube-ca.crt
     ports:

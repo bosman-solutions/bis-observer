@@ -134,7 +134,7 @@ class HostQuery(TelemetryBase):
     """
     Node-level metrics for a single host running Node Exporter.
 
-    instance: the Prometheus instance label, e.g. "rex:9100"
+    instance: the Prometheus instance label, e.g. "node-a:9100"
     """
 
     def __init__(self, instance: str, prom_url: str, loki_url: str):
@@ -330,7 +330,7 @@ class ServiceQuery(TelemetryBase):
     """
     Stack-level aggregate metrics for a Docker Compose project.
 
-    instance: host instance label, e.g. "balthazar:9100"
+    instance: host instance label, e.g. "node-a:9100"
     project:  compose_project label, e.g. "obs-aggregator"
     """
 

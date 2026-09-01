@@ -40,7 +40,9 @@ logger = logging.getLogger(__name__)
 PROM_URL            = os.getenv("THESEUS_PROM_URL", "http://obs-prometheus:9090")
 LOKI_URL            = os.getenv("THESEUS_LOKI_URL", "http://obs-loki:3100")
 GRAFANA_URL         = os.getenv("GRAFANA_URL", "http://obs-grafana:3000")
-GRAFANA_EXTERNAL_URL = os.getenv("GRAFANA_EXTERNAL_URL", GRAFANA_URL)
+# Compose always passes GRAFANA_EXTERNAL_URL, empty when unset — so `or` here,
+# not a getenv default, which an empty string would defeat.
+GRAFANA_EXTERNAL_URL = os.getenv("GRAFANA_EXTERNAL_URL", "") or GRAFANA_URL
 GRAFANA_TOKEN       = os.getenv("GRAFANA_TOKEN", "")
 AGGROBOARD_INTERVAL = int(os.getenv("AGGROBOARD_INTERVAL", "60"))
 DASHBOARD_PATH      = Path(os.getenv("DASHBOARD_PATH", "/dashboards/aggroboard.json"))

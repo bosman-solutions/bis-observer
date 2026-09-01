@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-gpu-exporter — Prometheus exporter for the passthrough RTX 3080.
+gpu-exporter — Prometheus exporter for a PCI-passthrough GPU.
 
-The 3080 is PCI-passthrough'd (vfio-pci on the host), so the host cannot read its
-VRAM directly — only the guest holding the card can. This exporter composes two
-existing SCC modules:
+A passthrough GPU (vfio-pci on the host) cannot be read by the host directly —
+only the guest holding the card can. This exporter composes two modules:
 
-  vmctl.gpu_holder()  → which VM currently holds the card (gato | tiny11 | None)
+  vmctl.gpu_holder()  → which VM currently holds the card, or None
   gpu_probe.query(vm) → nvidia-smi read from INSIDE that VM via qemu-guest-agent
 
 so the host can publish GPU VRAM/util history regardless of which VM holds the
@@ -42,7 +41,6 @@ Environment variables:
   POLL_INTERVAL      — seconds between GPU polls (default: 30)
   PROBE_TIMEOUT      — per-query guest-exec timeout, seconds (default: 20)
 
-Author: Weaver · 2026-06-22
 """
 
 import os

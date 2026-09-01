@@ -2,7 +2,7 @@
 # bis-observer — GPU COLLECTOR OVERLAY
 #
 # NOT part of the portable collector profile. This overlay belongs ONLY on nodes
-# that physically hold a GPU (today: gato, which holds the passthrough 3080).
+# that physically hold a GPU.
 # Keep it out of docker-compose.armv7.yml and every non-GPU node.
 #
 # Usage on a GPU node:
