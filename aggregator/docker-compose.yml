@@ -133,6 +133,8 @@ services:
       - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:-}
       - GRAFANA_TOKEN=${GRAFANA_TOKEN:-}
       - AGGROBOARD_INTERVAL=${AGGROBOARD_INTERVAL:-60}
+      - REGISTRY_INTERVAL=${REGISTRY_INTERVAL:-300}
+      - THESEUS_REGISTRY_DB=/data/registry.db
       - DASHBOARD_PATH=/dashboards/aggroboard.json
       - K8S_API_URL=${K8S_API_URL:-}
       - K8S_CONTROL_PLANE=${K8S_CONTROL_PLANE:-}
@@ -143,6 +145,8 @@ services:
     volumes:
       - ./config/grafana/provisioning/dashboards:/dashboards
       - ./secrets:/etc/theseus/secrets:ro
+      # Entity registry (SQLite). Named volume: identity and first_seen survive rebuilds.
+      - theseus-data:/data
     depends_on:
       - prometheus
       - loki
@@ -160,3 +164,5 @@ volumes:
     name: obs-loki-data
   grafana-data:
     name: obs-grafana-data
+  theseus-data:
+    name: obs-theseus-data
