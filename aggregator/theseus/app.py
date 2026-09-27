@@ -7,6 +7,7 @@ Routes:
   GET /api/host/<instance>/cpu          — cpu usage pct
   GET /api/host/<instance>/memory       — memory usage pct
   GET /api/host/<instance>/disk         — disk usage pct
+  GET /api/host/<instance>/hardware     — DMI identity, cpu/ram, disks, nics, temps, gpus
   GET /api/service/<instance>/<project> — service summary
   GET /api/container/<instance>/<name>  — container summary
   GET /api/container/<instance>/<name>/logs — log tail
@@ -137,6 +138,15 @@ def host_summary(hostname: str):
     async def _():
         async with _client() as c:
             return await HostQuery(hostname, PROM_URL, LOKI_URL).summary(c)
+    return jsonify(_run(_()))
+
+
+@app.get("/api/host/<hostname>/hardware")
+def host_hardware(hostname: str):
+    """Machine identity + hardware-only live readings (temps, GPUs)."""
+    async def _():
+        async with _client() as c:
+            return await HostQuery(hostname, PROM_URL, LOKI_URL).hardware(c)
     return jsonify(_run(_()))
 
 
