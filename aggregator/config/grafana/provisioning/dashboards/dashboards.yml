@@ -1,5 +1,19 @@
 apiVersion: 1
 
+# Two providers, because these dashboards have two very different lifecycles.
+#
+#   bis-theseus   — GENERATED. theseus rewrites aggroboard.json on every
+#                   heartbeat as hosts appear and disappear. The directory is
+#                   bind-mounted read-WRITE into obs-theseus, and everything
+#                   in it is gitignored: it is runtime state, not source.
+#
+#   bis-authored  — AUTHORED. Hand-built templated dashboards, tracked in git,
+#                   mounted read-ONLY so no service can rewrite them. These are
+#                   what the bis-starmap identity card deeplinks into.
+#
+# Keeping them in one directory would mean either committing generated state or
+# gitignoring authored source. Neither is worth the single mount this costs.
+
 providers:
   - name: bis-theseus
     orgId: 1
@@ -9,3 +23,16 @@ providers:
     allowUiUpdates: false
     options:
       path: /etc/grafana/provisioning/dashboards
+
+  - name: bis-authored
+    orgId: 1
+    type: file
+    disableDeletion: false
+    # Slower poll than the generated provider — these only change on deploy.
+    updateIntervalSeconds: 60
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
+      # Without this, a fork that edits and saves a copy in the UI gets a
+      # confusing collision with the provisioned original.
+      foldersFromFilesStructure: false

@@ -1,0 +1,70 @@
+###############################################################################
+# bis-observer — GPU COLLECTOR OVERLAY
+#
+# NOT part of the portable collector profile. This overlay belongs ONLY on nodes
+# that physically hold a GPU.
+# Keep it out of docker-compose.armv7.yml and every non-GPU node.
+#
+# Usage on a GPU node:
+#   docker compose -f docker-compose.yml -f gpu/docker-compose.dcgm.yml up -d
+#
+# Two things happen here:
+#   1. dcgm-exporter comes up on ${DCGM_EXPORTER_PORT}, using OUR counter set
+#      (gpu/dcgm-counters.csv) rather than the shipped default.
+#   2. gpu/config.gpu.alloy is mounted into the existing Alloy container, adding
+#      one scrape block. Alloy merges every file in /etc/alloy into a single
+#      config graph, so the new block forwards into the relabel component that
+#      already exists in config.metrics.alloy. Same pattern the aggregator uses
+#      with scrape_configs.d/ — fleet-identical base, node-specific extras.
+###############################################################################
+
+name: obs-collector
+
+services:
+
+  # --------------------------------------------------------------------------
+  # DCGM EXPORTER — device truth for the GPU
+  # Runs IN the node holding the card. Contrast with collector/gpu-exporter,
+  # which reads a passthrough card from the libvirt HOST via guest-agent and
+  # answers a different question: who currently holds it.
+  # --------------------------------------------------------------------------
+  dcgm-exporter:
+    image: ${DCGM_EXPORTER_IMAGE:-nvcr.io/nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04}
+    container_name: obs-dcgm-exporter
+    restart: unless-stopped
+    runtime: nvidia
+    cap_add:
+      - SYS_ADMIN            # required for DCGM profiling (DCP) field collection
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - DCGM_EXPORTER_LISTEN=:${DCGM_EXPORTER_PORT:-9400}
+      - DCGM_EXPORTER_COLLECTORS=/etc/dcgm-exporter/bis-counters.csv
+      - DCGM_EXPORTER_INTERVAL=5000     # ms — faster than scrape, so no aliasing
+    volumes:
+      - ./gpu/dcgm-counters.csv:/etc/dcgm-exporter/bis-counters.csv:ro
+
+  # --------------------------------------------------------------------------
+  # ALLOY — additive only: env + ordering. NO extra volume.
+  #
+  # The obvious move — bind-mounting gpu/config.gpu.alloy to
+  # /etc/alloy/config.gpu.alloy — CANNOT WORK, and fails at container init:
+  #
+  #   error mounting ".../gpu/config.gpu.alloy" to rootfs at
+  #   "/etc/alloy/config.gpu.alloy": create mountpoint: read-only file system
+  #
+  # /etc/alloy is already a read-only bind of collector/alloy/. runc has to
+  # create the target file before it can mount onto it, and it cannot create
+  # anything inside a read-only mount. Adding the directory doesn't help — the
+  # blocker is the read-only parent, not a missing path.
+  #
+  # So the GPU scrape config is COPIED into collector/alloy/ by `make collector`
+  # on GPU nodes and gitignored there, the same way aggregator/targets/*.yml are
+  # generated beside their source. Deploy is a reset, so the copy is idempotent.
+  # --------------------------------------------------------------------------
+  alloy:
+    environment:
+      - DCGM_EXPORTER_PORT=${DCGM_EXPORTER_PORT:-9400}
+    depends_on:
+      - dcgm-exporter

@@ -1,0 +1,3 @@
+# vendored from ~/claude/scc (source of truth) by sync_modules.sh
+gpu_probe.py
+vmctl.py

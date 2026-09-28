@@ -59,22 +59,46 @@ collector: _set_node_name
 		echo "         cp $(COLLECTOR_DIR)/.env.example $(COLLECTOR_DIR)/.env and set AGGREGATOR_HOST"; \
 		exit 1; \
 	fi
+	@# AGGREGATOR_HOST is the one key with no safe default — a collector that
+	@# ships nowhere looks healthy and reports nothing. Fail here, loudly, rather
+	@# than bring up a stack that quietly does nothing. Everything else in this
+	@# stack defaults in docker-compose.yml.
+	@if ! grep -qE '^AGGREGATOR_HOST=[^[:space:]]' $(COLLECTOR_DIR)/.env; then \
+		echo "  ERROR: AGGREGATOR_HOST is unset in $(COLLECTOR_DIR)/.env"; \
+		echo "         This collector would ship to nowhere. Set it and re-run."; \
+		exit 1; \
+	fi
+	@if grep -qE '^AGGREGATOR_HOST=10\.0\.0\.x' $(COLLECTOR_DIR)/.env; then \
+		echo "  ERROR: AGGREGATOR_HOST is still the placeholder from .env.example"; \
+		echo "         Set it to the aggregator's real address and re-run."; \
+		exit 1; \
+	fi
 	@if [ "$(ARCH)" = "armv7l" ]; then \
 		echo "  armv7 detected — deploying slim collector (no Alloy, no cAdvisor)..."; \
 		docker compose -f $(COLLECTOR_DIR)/docker-compose.armv7.yml --env-file $(COLLECTOR_DIR)/.env up -d; \
 	else \
-		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env up -d; \
+		GPU_ARGS=""; \
+		if [ -e /dev/nvidiactl ] && [ -f $(COLLECTOR_DIR)/gpu/docker-compose.dcgm.yml ]; then \
+			echo "  NVIDIA device present — including GPU overlay (dcgm-exporter)..."; \
+			GPU_ARGS="-f $(COLLECTOR_DIR)/gpu/docker-compose.dcgm.yml"; \
+			cp $(COLLECTOR_DIR)/gpu/config.gpu.alloy $(COLLECTOR_DIR)/alloy/config.gpu.alloy; \
+		else \
+			rm -f $(COLLECTOR_DIR)/alloy/config.gpu.alloy; \
+		fi; \
+		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml $$GPU_ARGS --env-file $(COLLECTOR_DIR)/.env up -d; \
 		echo "  restarting alloy to load config changes (bind mounts don't trigger recreate)..."; \
-		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml --env-file $(COLLECTOR_DIR)/.env restart alloy; \
+		docker compose -f $(COLLECTOR_DIR)/docker-compose.yml $$GPU_ARGS --env-file $(COLLECTOR_DIR)/.env restart alloy; \
 	fi
 	@echo "✓ Collector stack running."
 
 aggregator: _set_node_name
 	@echo "→ Deploying aggregator stack..."
+	@# Nothing in the aggregator .env is required — every key defaults in
+	@# docker-compose.yml. The file only has to exist for --env-file, so seed it
+	@# from the example rather than failing. Never overwrites an existing file.
 	@if [ ! -f $(AGGREGATOR_DIR)/.env ]; then \
-		echo "  ERROR: $(AGGREGATOR_DIR)/.env not found."; \
-		echo "         cp $(AGGREGATOR_DIR)/.env.example $(AGGREGATOR_DIR)/.env"; \
-		exit 1; \
+		echo "  $(AGGREGATOR_DIR)/.env not found — seeding from .env.example (all defaults)."; \
+		cp $(AGGREGATOR_DIR)/.env.example $(AGGREGATOR_DIR)/.env; \
 	fi
 	docker compose -f $(AGGREGATOR_DIR)/docker-compose.yml --env-file $(AGGREGATOR_DIR)/.env up -d --build
 	@echo "✓ Aggregator stack running."

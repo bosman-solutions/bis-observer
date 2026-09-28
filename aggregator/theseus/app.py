@@ -7,12 +7,16 @@ Routes:
   GET /api/host/<instance>/cpu          — cpu usage pct
   GET /api/host/<instance>/memory       — memory usage pct
   GET /api/host/<instance>/disk         — disk usage pct
+  GET /api/host/<instance>/hardware     — DMI identity, cpu/ram, disks, nics, temps, gpus
   GET /api/service/<instance>/<project> — service summary
   GET /api/container/<instance>/<name>  — container summary
   GET /api/container/<instance>/<name>/logs — log tail
   GET /api/pod/<namespace>/<pod>        — pod summary
   GET /api/pod/<namespace>/<pod>/range  — pod cpu usage time series
   GET /api/pod/<namespace>/<pod>/logs   — pod log tail
+  GET /entities[?kind=]                 — entity registry (see registry/)
+  GET /entities/<id>                    — one entity with stored links
+  POST /entities/discover               — run registry discovery now
 
 Aggroboard runs as a background asyncio task on startup.
 """
@@ -28,6 +32,7 @@ from flask import Flask, jsonify, request
 from .telemetry import ContainerQuery, HostQuery, ServiceQuery, PodQuery
 from .aggroboard import Aggroboard
 from .aggrokube import Aggrokube
+from .registry import init_app as init_registry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,11 +45,15 @@ logger = logging.getLogger(__name__)
 PROM_URL            = os.getenv("THESEUS_PROM_URL", "http://obs-prometheus:9090")
 LOKI_URL            = os.getenv("THESEUS_LOKI_URL", "http://obs-loki:3100")
 GRAFANA_URL         = os.getenv("GRAFANA_URL", "http://obs-grafana:3000")
-GRAFANA_EXTERNAL_URL = os.getenv("GRAFANA_EXTERNAL_URL", GRAFANA_URL)
+# Compose always passes GRAFANA_EXTERNAL_URL, empty when unset — so `or` here,
+# not a getenv default, which an empty string would defeat.
+GRAFANA_EXTERNAL_URL = os.getenv("GRAFANA_EXTERNAL_URL", "") or GRAFANA_URL
 GRAFANA_TOKEN       = os.getenv("GRAFANA_TOKEN", "")
 AGGROBOARD_INTERVAL = int(os.getenv("AGGROBOARD_INTERVAL", "60"))
 DASHBOARD_PATH      = Path(os.getenv("DASHBOARD_PATH", "/dashboards/aggroboard.json"))
 AGGROKUBE_PATH      = DASHBOARD_PATH.parent / "aggrokube.json"
+REGISTRY_DB         = os.getenv("THESEUS_REGISTRY_DB", "/data/registry.db")
+REGISTRY_INTERVAL   = int(os.getenv("REGISTRY_INTERVAL", "300"))
 
 app = Flask(__name__)
 
@@ -85,6 +94,17 @@ def _start_background():
 
 _start_background()
 
+# Entity registry. prom_uid is read lazily: the aggroboard resolves it after
+# boot, and a change in it re-fingerprints the stored explore links.
+init_registry(
+    app,
+    prom_url  = PROM_URL,
+    ext_url   = GRAFANA_EXTERNAL_URL,
+    prom_uid  = lambda: _board._ds_uid or "prometheus",
+    db_path   = REGISTRY_DB,
+    interval  = REGISTRY_INTERVAL,
+)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _run(coro):
@@ -118,6 +138,15 @@ def host_summary(hostname: str):
     async def _():
         async with _client() as c:
             return await HostQuery(hostname, PROM_URL, LOKI_URL).summary(c)
+    return jsonify(_run(_()))
+
+
+@app.get("/api/host/<hostname>/hardware")
+def host_hardware(hostname: str):
+    """Machine identity + hardware-only live readings (temps, GPUs)."""
+    async def _():
+        async with _client() as c:
+            return await HostQuery(hostname, PROM_URL, LOKI_URL).hardware(c)
     return jsonify(_run(_()))
 
 

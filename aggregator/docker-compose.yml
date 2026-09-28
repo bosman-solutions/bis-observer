@@ -50,7 +50,7 @@ services:
   # --------------------------------------------------------------------------
   # LOKI — log aggregator
   # Receives pushes from all collector Alloy instances.
-  # Config in ./config/loki.yml
+  # Config in ./config/loki/loki.yml, recording rules in ./config/loki/rules/fake/
   # -config.expand-env=true allows env var interpolation in loki.yml
   # --------------------------------------------------------------------------
   loki:
@@ -58,7 +58,9 @@ services:
     container_name: obs-loki
     restart: unless-stopped
     volumes:
-      - ./config/loki.yml:/etc/loki/loki.yml:ro
+      # Directory mount: loki.yml + rules/. Survives vim/git renames (a
+      # single-file bind mount pins the old inode).
+      - ./config/loki:/etc/loki:ro
       - loki-data:/loki
     command: -config.file=/etc/loki/loki.yml -config.expand-env=true
     ports:
@@ -80,9 +82,34 @@ services:
     restart: unless-stopped
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      # Authored dashboards — tracked in git, read-only so nothing but a deploy
+      # can change them. The generated ones live under provisioning/dashboards
+      # and are written by obs-theseus; see provisioning/dashboards/dashboards.yml.
+      - ./config/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     environment:
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Read-only public access, default OFF. Set GRAFANA_ANON=true on an
+      # estate whose map is meant to be readable by people who do not have an
+      # account — the bis-starmap identity card links into the detail
+      # dashboards, and without this those links land on a login wall.
+      #
+      # Anonymous rather than a shared read-only account on purpose: an account
+      # means a credential in a public URL, which is a secret that has already
+      # leaked. Anonymous has nothing to leak and nothing to rotate.
+      #
+      # The role is Viewer and stays Viewer. A Viewer can read provisioned
+      # dashboards and cannot reach Explore, edit panels, or touch datasources
+      # (which are provisioned editable:false anyway). Do not raise this to
+      # Editor to "make Explore work" — that hands every anonymous reader a
+      # query editor pointed at your Prometheus.
+      - GF_AUTH_ANONYMOUS_ENABLED=${GRAFANA_ANON:-false}
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
+      # Anonymous readers get the dashboard, not the chrome around it.
+      - GF_NEWS_NEWS_FEED_ENABLED=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
@@ -104,12 +131,15 @@ services:
     environment:
       - THESEUS_PROM_URL=http://obs-prometheus:9090
       - THESEUS_LOKI_URL=http://obs-loki:3100
-      - GRAFANA_URL=http://obs-grafana:3000
-      - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:-http://obs-grafana:3000}
+      - GRAFANA_URL=${GRAFANA_URL:-http://obs-grafana:3000}
+      - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:-}
       - GRAFANA_TOKEN=${GRAFANA_TOKEN:-}
       - AGGROBOARD_INTERVAL=${AGGROBOARD_INTERVAL:-60}
+      - REGISTRY_INTERVAL=${REGISTRY_INTERVAL:-300}
+      - THESEUS_REGISTRY_DB=/data/registry.db
       - DASHBOARD_PATH=/dashboards/aggroboard.json
       - K8S_API_URL=${K8S_API_URL:-}
+      - K8S_CONTROL_PLANE=${K8S_CONTROL_PLANE:-}
       - K8S_TOKEN_FILE=/etc/theseus/secrets/kube-token
       - K8S_CA_FILE=/etc/theseus/secrets/kube-ca.crt
     ports:
@@ -117,6 +147,8 @@ services:
     volumes:
       - ./config/grafana/provisioning/dashboards:/dashboards
       - ./secrets:/etc/theseus/secrets:ro
+      # Entity registry (SQLite). Named volume: identity and first_seen survive rebuilds.
+      - theseus-data:/data
     depends_on:
       - prometheus
       - loki
@@ -134,3 +166,5 @@ volumes:
     name: obs-loki-data
   grafana-data:
     name: obs-grafana-data
+  theseus-data:
+    name: obs-theseus-data

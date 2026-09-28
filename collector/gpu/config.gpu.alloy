@@ -1,0 +1,32 @@
+// =============================================================================
+// Grafana Alloy — GPU metrics (NODE-SPECIFIC)
+// =============================================================================
+// Mounted into /etc/alloy ONLY on nodes running the dcgm overlay. Alloy loads
+// every *.alloy file in the directory into one config graph, so this block can
+// forward into prometheus.relabel.set_instance declared in config.metrics.alloy.
+//
+// Consequence worth knowing: if this file is present and dcgm-exporter is NOT
+// running, Alloy stays healthy and the job simply reports the target down —
+// which is the correct behaviour. Absent exporter reads as DOWN, never as idle.
+//
+// Environment variables:
+//   NODE_NAME           — human label for this node
+//   DCGM_EXPORTER_PORT  — dcgm-exporter port (default 9400)
+// =============================================================================
+
+prometheus.scrape "dcgm_exporter" {
+  targets = [
+    {
+      "__address__" = "localhost:" + coalesce(env("DCGM_EXPORTER_PORT"), "9400"),
+      "node"        = env("NODE_NAME"),
+    },
+  ]
+  forward_to      = [prometheus.relabel.set_instance.receiver]
+  job_name        = "dcgm-exporter"
+
+  // 10s: GPU state moves far faster than host state. Thermal throttle events
+  // and KV-cache pressure last seconds — a 30s interval aliases them away
+  // entirely, which is how "the dashboard looked fine" happens.
+  scrape_interval = "10s"
+  scrape_timeout  = "8s"
+}

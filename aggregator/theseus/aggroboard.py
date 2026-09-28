@@ -12,9 +12,9 @@ Sidecar schema:
     "version": 1,
     "updated_at": 1780433206,
     "hosts": {
-      "melchior": {
-        "instance": "melchior",
-        "explore_url": "http://melchior:3000/explore?..."
+      "node-a": {
+        "instance": "node-a",
+        "explore_url": "http://<grafana>:3000/explore?..."
       }
     }
   }
@@ -31,6 +31,7 @@ from pathlib import Path
 import httpx
 
 from .links import host_explore_url
+from .state import state_file
 
 logger = logging.getLogger(__name__)
 
@@ -445,7 +446,7 @@ class Aggroboard:
         self.grafana_ext_url = grafana_ext_url
         self.grafana_token   = grafana_token
         self.dashboard_path  = dashboard_path
-        self.sidecar_path    = dashboard_path.parent / "aggroboard_hosts.json"
+        self.sidecar_path    = state_file("aggroboard_hosts.json", dashboard_path.parent)
         self.interval        = interval
         self._ds_uid: str | None = None
         self._ds_ref: dict   = {"type": "prometheus", "uid": "${datasource}"}

@@ -19,21 +19,32 @@ Sidecar schema (aggrokube_state.json):
   {
     "version": 1,
     "updated_at": 1781446000,
-    "nodes": ["cerberus", "fido", "princess", "rex"],
-    "namespaces": ["arcade", "monitoring"],
-    "workloads": ["arcade/Deployment/puzzu", "arcade/StatefulSet/redis", "monitoring/DaemonSet/fluentd"]
+    "nodes": ["node-a", "node-b", "node-c"],
+    "namespaces": ["app", "monitoring"],
+    "workloads": ["app/Deployment/web", "app/StatefulSet/redis", "monitoring/DaemonSet/fluentd"]
   }
 """
 
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
+
+from .state import state_file
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Control-plane node names, comma-separated, from the environment. Used only to
+# label node rows; an unset value means every node is labelled "node". Never
+# hardcode a hostname here — this repo is fleet-agnostic and the value belongs
+# in the aggregator's .env, placed by Ansible from the fleet inventory.
+CONTROL_PLANE_NODES = {
+    n.strip() for n in os.getenv("K8S_CONTROL_PLANE", "").split(",") if n.strip()
+}
 
 # Panel geometry — matches aggroboard conventions
 STAT_W  = 6
@@ -359,8 +370,9 @@ def _build_dashboard(
 
     # ── Per-node rows ─────────────────────────────────────────────────────────
     for node in nodes:
-        role = "control-plane" if node == "cerberus" else "worker"
-        panels.append(_row(pid, f"{node.upper()}  [{role}]", y)); pid += 1; y += ROW_H
+        role = "control-plane" if node in CONTROL_PLANE_NODES else "worker"
+        label = f"{node.upper()}  [{role}]" if CONTROL_PLANE_NODES else node.upper()
+        panels.append(_row(pid, label, y)); pid += 1; y += ROW_H
 
         panels.append(_stat(pid, "Node Ready",
             f'kube_node_status_condition{{node="{node}",condition="Ready",status="true"}}',
@@ -506,7 +518,7 @@ class Aggrokube:
         self.grafana_ext_url = grafana_ext_url
         self.grafana_token   = grafana_token
         self.dashboard_path  = dashboard_path
-        self.sidecar_path    = dashboard_path.parent / "aggrokube_state.json"
+        self.sidecar_path    = state_file("aggrokube_state.json", dashboard_path.parent)
         self.interval        = interval
         self._ds_ref: dict   = {"type": "prometheus", "uid": "${datasource}"}
 

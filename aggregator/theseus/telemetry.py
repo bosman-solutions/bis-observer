@@ -134,7 +134,7 @@ class HostQuery(TelemetryBase):
     """
     Node-level metrics for a single host running Node Exporter.
 
-    instance: the Prometheus instance label, e.g. "rex:9100"
+    instance: the Prometheus instance label, e.g. "node-a:9100"
     """
 
     def __init__(self, instance: str, prom_url: str, loki_url: str):
@@ -290,6 +290,91 @@ class HostQuery(TelemetryBase):
             "nodename": u.get("nodename"),
         }
 
+    async def hardware(self, client: httpx.AsyncClient) -> dict:
+        """
+        What the machine IS, plus the live readings only hardware has.
+
+        Static: DMI identity (vendor/product/board/bios, virtual or metal),
+        CPU threads, RAM + swap, physical disks, physical NIC link speeds.
+        Live: temperatures (hwmon + thermal zones), GPUs via DCGM.
+
+        Every field is optional. A collector that isn't enabled on a node
+        (no hwmon in a VM, no DCGM without a GPU) yields an empty field,
+        never an error — the pane shows what the node has.
+        """
+        i = self._i
+        (dmi, threads, mem, swap, disks, nics, hwmon, zones, gpu, chips, labels) = await asyncio.gather(
+            self._prom_query(client, f'node_dmi_info{{{i}}}'),
+            self._prom_scalar(client, f'count(node_cpu_seconds_total{{{i},mode="idle"}})'),
+            self._prom_scalar(client, f'node_memory_MemTotal_bytes{{{i}}}'),
+            self._prom_scalar(client, f'node_memory_SwapTotal_bytes{{{i}}}'),
+            self._prom_query(client, f'node_disk_info{{{i},device!~"dm-.*|sr.*|loop.*|zram.*|md.*"}}'),
+            self._prom_query(client, f'node_network_speed_bytes{{{i},device!~"lo|veth.*|docker.*|br.*|virbr.*|vnet.*|cali.*|flannel.*|cni.*|tailscale.*|wg.*|tun.*|tap.*"}}'),
+            self._prom_query(client, f'max by (chip, sensor) (node_hwmon_temp_celsius{{{i}}})'),
+            self._prom_query(client, f'node_thermal_zone_temp{{{i}}}'),
+            self._prom_query(client, '{__name__=~"DCGM_FI_DEV_(GPU_UTIL|GPU_TEMP|POWER_USAGE|ENFORCED_POWER_LIMIT|FB_USED|FB_TOTAL)",' + i + '}'),
+            self._prom_query(client, f'node_hwmon_chip_names{{{i}}}'),
+            self._prom_query(client, f'node_hwmon_sensor_label{{{i}}}'),
+        )
+        # hwmon chips arrive as bus paths (pci0000:00_0000:00:18_3); node-exporter
+        # publishes the driver name (k10temp, nvme, coretemp) and sensor labels
+        # (Tctl, Composite) as separate info series. Join them for readable names.
+        chip_name = {r["metric"].get("chip"): r["metric"].get("chip_name") for r in chips}
+        sensor_label = {(r["metric"].get("chip"), r["metric"].get("sensor")): r["metric"].get("label") for r in labels}
+
+        def clean(v):
+            return None if not v or v.strip().lower() in ("default string", "to be filled by o.e.m.", "none") else v.strip()
+
+        m = dmi[0]["metric"] if dmi else {}
+        vendor, product = clean(m.get("system_vendor")), clean(m.get("product_name"))
+        virt_marks = ("qemu", "kvm", "vmware", "virtualbox", "innotek", "xen", "hyper-v", "microsoft corporation")
+        virtual = any(k in f"{vendor or ''} {product or ''}".lower() for k in virt_marks)
+        board = " ".join(x for x in (clean(m.get("board_vendor")), clean(m.get("board_name"))) if x) or None
+        bios = " ".join(x for x in (clean(m.get("bios_version")), clean(m.get("bios_date"))) if x) or None
+
+        def val(r):
+            try:
+                return float(r["value"][1])
+            except (KeyError, IndexError, ValueError):
+                return None
+
+        sensors = [
+            {"name": " ".join(x for x in (
+                chip_name.get(r["metric"].get("chip")) or r["metric"].get("chip", "").replace("platform_", ""),
+                sensor_label.get((r["metric"].get("chip"), r["metric"].get("sensor"))) or r["metric"].get("sensor", ""),
+            ) if x), "c": val(r)}
+            for r in hwmon
+        ] + [
+            {"name": r["metric"].get("type", "zone"), "c": val(r)} for r in zones
+        ]
+        sensors = sorted((x for x in sensors if x["c"] is not None and 0 < x["c"] < 150),
+                         key=lambda x: x["c"], reverse=True)
+
+        gpus: dict[str, dict] = {}
+        field = {
+            "DCGM_FI_DEV_GPU_UTIL": "util_pct", "DCGM_FI_DEV_GPU_TEMP": "temp_c",
+            "DCGM_FI_DEV_POWER_USAGE": "power_w", "DCGM_FI_DEV_ENFORCED_POWER_LIMIT": "power_limit_w",
+            "DCGM_FI_DEV_FB_USED": "vram_used_mib", "DCGM_FI_DEV_FB_TOTAL": "vram_total_mib",
+        }
+        for r in gpu:
+            g = gpus.setdefault(r["metric"].get("gpu", "0"), {"model": r["metric"].get("modelName")})
+            g[field[r["metric"]["__name__"]]] = val(r)
+
+        return {
+            "machine": {"vendor": vendor, "product": product, "board": board,
+                        "bios": bios, "virtual": virtual if m else None},
+            "cpu": {"threads": int(threads) if threads else None},
+            "memory": {"total_bytes": mem, "swap_bytes": swap},
+            "disks": [{"device": r["metric"].get("device"),
+                       "model": clean(r["metric"].get("model")) if r["metric"].get("model") else None}
+                      for r in sorted(disks, key=lambda r: r["metric"].get("device", ""))],
+            "nics": [{"device": r["metric"].get("device"),
+                      "speed_bps": (val(r) * 8) if (val(r) or 0) > 0 else None}
+                     for r in sorted(nics, key=lambda r: r["metric"].get("device", ""))],
+            "temps": {"hottest_c": sensors[0]["c"] if sensors else None, "sensors": sensors[:8]},
+            "gpus": [gpus[k] for k in sorted(gpus)],
+        }
+
     async def summary(self, client: httpx.AsyncClient) -> dict:
         """All host metrics in one dict. Used by aggroboard and API."""
         (cpu, mem_pct, disk_pct, swap, load, uptime, mem_bytes, mem_total,
@@ -330,7 +415,7 @@ class ServiceQuery(TelemetryBase):
     """
     Stack-level aggregate metrics for a Docker Compose project.
 
-    instance: host instance label, e.g. "balthazar:9100"
+    instance: host instance label, e.g. "node-a:9100"
     project:  compose_project label, e.g. "obs-aggregator"
     """
 

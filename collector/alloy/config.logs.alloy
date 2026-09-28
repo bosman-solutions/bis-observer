@@ -85,6 +85,18 @@ loki.source.syslog "pi_fleet" {
 loki.process "level_extract" {
   forward_to = [loki.write.aggregator.receiver]
 
+  // Entries older than Loki will accept die here, at the collector. Loki keeps
+  // a stream's out-of-order window at ~1h (max_chunk_age / 2); anything older
+  // is rejected "too far behind", Alloy drops the whole batch, and a re-read
+  // container log (romm, 2026-09-27: 16.8M rejected samples) turns into a
+  // loop of Loki write errors + Alloy batch failures. Dropping first keeps the
+  // batch clean and the loop never starts. Counted in
+  // loki_process_dropped_lines_total{reason="too_old"}.
+  stage.drop {
+    older_than          = "55m"
+    drop_counter_reason = "too_old"
+  }
+
   stage.regex {
     expression = "(?i)\\b(?P<level>TRACE|DEBUG|INFO|WARNING|WARN|ERROR|ERR|FATAL|CRITICAL)\\b"
   }
