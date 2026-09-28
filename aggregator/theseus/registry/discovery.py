@@ -3,7 +3,7 @@ import time
 
 import httpx
 
-from . import db
+from . import db, lifecycle
 
 
 def _addr(instance):
@@ -33,18 +33,38 @@ def discover(conn, prom_url, query=prom_query):
                   {"host": host, "instance": m["instance"],
                    "nodename": m.get("nodename", host)}, now)
 
-    containers = query(prom_url, 'count by (instance, name) (container_last_seen{name!=""})')
-    for m in containers:
+    # Containers: a sighting is cAdvisor OR a running docker-inventory row.
+    # docker-inventory also carries compose labels, which decide lifecycle
+    # class (compose-managed = persistent); they merge in and stick.
+    inv = {}
+    for m in query(prom_url, "docker_container_info"):
+        host, name = m.get("node") or _addr(m.get("instance", "")), m.get("name")
+        if name:
+            inv[(host, name)] = m
+    seen = {}
+    for m in query(prom_url, 'count by (instance, name) (container_last_seen{name!=""})'):
         host = _addr(m["instance"])
-        db.upsert(conn, f"container:{host}/{m['name']}", "container",
-                  {"host": host, "instance": m["instance"], "name": m["name"]}, now)
+        seen[(host, m["name"])] = {"host": host, "instance": m["instance"], "name": m["name"]}
+    for (host, name), m in inv.items():
+        if m.get("state") == "running":
+            seen.setdefault((host, name), {"host": host, "instance": host, "name": name})
+    for (host, name), labels in seen.items():
+        extra = {k: inv[(host, name)][k] for k in ("compose_project", "compose_service", "image")
+                 if (host, name) in inv and inv[(host, name)].get(k)}
+        db.upsert(conn, f"container:{host}/{name}", "container", labels | extra, now)
 
     rated = _log_rates(conn, prom_url, query, now,
                        [f"node:{_addr(m['instance'])}" for m in nodes],
-                       [f"container:{_addr(m['instance'])}/{m['name']}" for m in containers])
+                       [f"container:{h}/{n}" for h, n in seen])
+
+    # Ephemerals fade: unseen past EPHEMERAL_TTL -> gone. Persistent never pruned.
+    pruned = [e["id"] for e in db.list_(conn) if lifecycle.prunable(e, now)]
+    for eid in pruned:
+        db.delete(conn, eid)
 
     conn.commit()
-    return {"nodes": len(nodes), "containers": len(containers), "log_rates": rated, "at": now}
+    return {"nodes": len(nodes), "containers": len(seen), "log_rates": rated,
+            "pruned": len(pruned), "at": now}
 
 
 def _log_rates(conn, prom_url, query, now, node_ids, container_ids):
