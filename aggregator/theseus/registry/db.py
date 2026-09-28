@@ -65,3 +65,10 @@ def set_links(conn, eid, links):
         "UPDATE entity SET links = ? WHERE id = ?",
         (json.dumps(links, sort_keys=True), eid),
     )
+
+
+def set_snapshot(conn, eid, snapshot):
+    conn.execute(
+        "UPDATE entity SET snapshot = ? WHERE id = ?",
+        (json.dumps(snapshot, sort_keys=True), eid),
+    )

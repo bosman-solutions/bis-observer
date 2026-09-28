@@ -15,7 +15,7 @@ common:
   storage:
     filesystem:
       chunks_directory: /loki/chunks
-      rules_directory:  /loki/rules
+      rules_directory:  /etc/loki/rules
   replication_factor: 1
   ring:
     kvstore:
@@ -43,3 +43,25 @@ compactor:
   working_directory:       /loki/compactor
   retention_enabled:       true
   delete_request_store:    filesystem
+
+# Ruler — recording rules turn log volume into Prometheus metrics.
+# Rules live in git at config/loki/rules/<tenant>/ (tenant is "fake" with
+# auth disabled) and are re-read every poll_interval, so rule edits land
+# without a restart. Results are remote-written to Prometheus, which already
+# runs with --web.enable-remote-write-receiver.
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /etc/loki/rules
+  rule_path: /loki/rules-temp
+  evaluation_interval: 1m
+  poll_interval: 1m
+  enable_api: true
+  wal:
+    dir: /loki/ruler-wal
+  remote_write:
+    enabled: true
+    clients:
+      prometheus:
+        url: http://obs-prometheus:9090/api/v1/write

@@ -1,0 +1,9 @@
+# Log volume as metrics. One series per node × container × level; lines with
+# no parsed level land under level="". Error rate per minute:
+#   sum by (node, container_name) (bis:log_lines:rate5m{level="error"}) * 60
+groups:
+  - name: bis-log-rates
+    interval: 1m
+    rules:
+      - record: bis:log_lines:rate5m
+        expr: sum by (node, container_name, level) (rate({job="docker"}[5m]))

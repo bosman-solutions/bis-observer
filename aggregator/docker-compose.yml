@@ -50,7 +50,7 @@ services:
   # --------------------------------------------------------------------------
   # LOKI — log aggregator
   # Receives pushes from all collector Alloy instances.
-  # Config in ./config/loki.yml
+  # Config in ./config/loki/loki.yml, recording rules in ./config/loki/rules/fake/
   # -config.expand-env=true allows env var interpolation in loki.yml
   # --------------------------------------------------------------------------
   loki:
@@ -58,7 +58,9 @@ services:
     container_name: obs-loki
     restart: unless-stopped
     volumes:
-      - ./config/loki.yml:/etc/loki/loki.yml:ro
+      # Directory mount: loki.yml + rules/. Survives vim/git renames (a
+      # single-file bind mount pins the old inode).
+      - ./config/loki:/etc/loki:ro
       - loki-data:/loki
     command: -config.file=/etc/loki/loki.yml -config.expand-env=true
     ports:

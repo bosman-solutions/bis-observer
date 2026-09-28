@@ -32,6 +32,8 @@ import os
 import time
 from pathlib import Path
 
+from .state import state_file
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -516,7 +518,7 @@ class Aggrokube:
         self.grafana_ext_url = grafana_ext_url
         self.grafana_token   = grafana_token
         self.dashboard_path  = dashboard_path
-        self.sidecar_path    = dashboard_path.parent / "aggrokube_state.json"
+        self.sidecar_path    = state_file("aggrokube_state.json", dashboard_path.parent)
         self.interval        = interval
         self._ds_ref: dict   = {"type": "prometheus", "uid": "${datasource}"}
 
